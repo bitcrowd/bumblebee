@@ -27,22 +27,65 @@ Valid examples are:
 [8,9,6,7]
 """
 
-allowed_tokens = ["[", "1", "2", ",", "]"]
+numbers = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
+start_token = ["["]
+end_token = ["]"]
+addition_token = [","]
 
-special_token_ids =
-  Bumblebee.Tokenizer.all_special_tokens(tokenizer)
-  |> Enum.map(&Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
-  |> Enum.reject(&is_nil/1)
 
-allowed_token_ids = Enum.map(allowed_tokens, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+# states
+# * start_token -> start -> in_number, end -> numbers ++ end_token
+# * numbers -> in_number -> in_number, addition, end -> numbers ++ addition_token ++ end_token
+# * addition_token -> addition -> in_number -> numbers
+# * end_token -> end -> END_OF_SEQUENCE -> END_OF_SEQUENCE
 
-all_allowed_token_ids = special_token_ids ++ allowed_token_ids
+# {
+#   start: start_token,
+#   numbers: numbers,
+# }
+
+## am anfang war nix
+## -> Start token
+## last_state = inspect_last_token oder last state from stack
+
+## Am Anfang sind wir im start_token state und haben den start token schon
+## die nächsten kandidaten wählen
+## die große wahl
+## inpect current token -> determine which state was chosen
+## next loop
+
+## last token -> state
+
+end_of_sequence_token = [Bumblebee.Tokenizer.special_token(tokenizer, :eos)]
+
+## transitions
+transitions = %{
+  starting: Enum.map(start_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1)),
+  in_array: Enum.map(numbers ++ end_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1)),
+  in_number: Enum.map(numbers ++ addition_token ++ end_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1)),
+  in_addition: Enum.map(numbers, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1)),
+  ending: Enum.map(end_of_sequence_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+}
+## states
+states = %{
+  starting: [],
+  in_array: Enum.map(start_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1)),
+  in_number: Enum.map(numbers, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1)),
+  in_addition: Enum.map(addition_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1)),
+  ending: Enum.map(end_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+}
+
+dfa = %{
+  states: states,
+  transitions: transitions
+}
+
 
 generation_config =
   Bumblebee.configure(generation_config,
     max_new_tokens: 24,
-    allowed_token_ids: all_allowed_token_ids,
-    strategy: %{type: :multinomial_sampling, top_p: 0.6}
+    strategy: %{type: :multinomial_sampling, top_p: 0.6},
+    dfa: dfa
   )
 
 serving =

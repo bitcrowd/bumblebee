@@ -3,6 +3,44 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
 
   import Nx.Defn
 
+  deftransform dfa_processor(logits, context, opts \\ []) do
+    opts = Keyword.validate!(opts, [:dfa])
+    dfa = opts[:dfa]
+
+    ## figure out current state from context
+    current_state = figure_out_state(context, dfa)
+    ## figure out allowed tokens for next sampling
+    allowed_tokens = dfa.transitions[current_state]
+    ## pass allowed tokens into allow_token_ids
+    allow_token_ids(logits, allowed_tokens)
+  end
+
+  ## figure out state from last token in context
+  deftransform figure_out_state(context, dfa) do
+
+      last_token = context.sequence[0]
+      if context.length == 512 do
+        :starting
+        # if context.length == 1 do
+        #   dbg("hon, honk")
+        #   dbg(context.sequence)
+        #   :starting
+        # else
+        #   :in_number
+        #   # last_token = context.sequence[context.length - 1]
+
+        #   # {state, _tokens} =
+        #   #   dfa.states
+        #   #   |> Enum.find(fn {_state, tokens} ->
+        #   #     last_token == nil || last_token in tokens
+        #   #   end)
+
+        #   # state
+      else
+        :in_number
+      end
+  end
+
   deftransform suppressed_tokens_processor(logits, _context, opts \\ []) do
     opts = Keyword.validate!(opts, [:suppressed_token_ids])
 

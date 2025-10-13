@@ -372,6 +372,9 @@ defmodule Bumblebee.Text.Generation do
         if config.allowed_token_ids != [] do
           &allowed_tokens_processor(&1, &2, allowed_token_ids: config.allowed_token_ids)
         end,
+        if config.dfa do
+          &dfa_processor(&1, &2, dfa: config.dfa)
+        end,
         if config.temperature && config.temperature != 1.0 do
           &temperature_processor(&1, &2, temperature: config.temperature)
         end
