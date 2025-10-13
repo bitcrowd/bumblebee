@@ -27,10 +27,21 @@ Valid examples are:
 [8,9,6,7]
 """
 
+allowed_tokens = ["[", "1", "2", ",", "]"]
+
+special_token_ids =
+  Bumblebee.Tokenizer.all_special_tokens(tokenizer)
+  |> Enum.map(&Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+  |> Enum.reject(&is_nil/1)
+
+allowed_token_ids = Enum.map(allowed_tokens, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+
+all_allowed_token_ids = special_token_ids ++ allowed_token_ids
+
 generation_config =
   Bumblebee.configure(generation_config,
     max_new_tokens: 24,
-    # allowed_token_ids: [0,1,2,28,32,33,34,35,36,37,38,39,40,41,75,77],
+    allowed_token_ids: all_allowed_token_ids,
     strategy: %{type: :multinomial_sampling, top_p: 0.6}
   )
 
