@@ -11,6 +11,12 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
     Nx.indexed_put(logits, indices, values)
   end
 
+  deftransform allowed_tokens_processor(logits, _context, opts \\ []) do
+    _opts = Keyword.validate!(opts, [:allowed_token_ids])
+
+    allow_token_ids(logits, opts[:allowed_token_ids])
+  end
+
   defn bos_token_processor(logits, context, opts \\ []) do
     opts = keyword!(opts, [:bos_token_id])
     bos_token_id = opts[:bos_token_id]
@@ -111,6 +117,16 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
     logits
     |> Nx.fill(Nx.Constants.neg_infinity(), type: Nx.type(logits))
     |> Nx.put_slice([token_id], Nx.tensor([0], type: Nx.type(logits)))
+  end
+
+  deftransformp allow_token_ids(logits, allowed_token_ids) do
+    # Convert allowed_token_ids to a tensor if it's a list
+    allowed_indices = Nx.tensor(allowed_token_ids)
+    allowed_logits = Nx.take(logits, allowed_indices)
+    suppressed_logits = Nx.fill(logits, Nx.Constants.neg_infinity(), type: Nx.type(logits))
+
+    indices = Nx.new_axis(allowed_indices, -1)
+    Nx.indexed_put(suppressed_logits, indices, allowed_logits)
   end
 
   deftransformp ignore_token_id(logits, token_id) do
