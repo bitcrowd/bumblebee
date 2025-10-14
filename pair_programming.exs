@@ -13,51 +13,55 @@ repo = {:hf, "HuggingFaceTB/SmolLM2-135M-Instruct"}
 sequence_length = 512
 
 prompt = """
-Give me 10 random, single digit numbers in an array.
+Give me an array that contains a mix of numbers and text.
+There MUST be at least one number and one text.
 Valid examples are:
 
-[8,2,3,8,6,4,8,6,4,8]
+["hello",89,"hola",6,4,8]
 """
 
 numbers = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
-array_start_token = ["["]
-array_end_token = ["]"]
-array_addition_token = [","]
+array_start_token = "["
+array_end_token = "]"
+array_addition_token = ","
 # String Token would require ! (like "everything, just without ....)
-string_token ="\"" # Token 18
-
+# Token 18
+string_token = "\""
 
 # ToDo: should be a list -> idx
-states_to_num = %{
-  starting: 0,
-  in_array: 1,
-  in_number: 2,
-  in_addition: 3,
-  in_string: 4,
-  end_of_string: 5,
-  ending: 6
-}
+states = [
+  :starting,
+  :in_array,
+  :in_number,
+  :in_addition,
+  :in_string,
+  :end_of_string,
+  :ending
+]
+
+state_to_num = fn state -> Enum.find_index(states, & &1 == state) end
 
 # ------------------------------------- above chars ------------------------------ #
 # ------------------------------------- below tokens ------------------------------ #
 
-array_start_token_id = Bumblebee.Tokenizer.token_to_id(tokenizer, array_start_token))
-array_end_token_id = Bumblebee.Tokenizer.token_to_id(tokenizer, array_end_token))
+array_start_token_id = Bumblebee.Tokenizer.token_to_id(tokenizer, array_start_token)
+array_end_token_id = Bumblebee.Tokenizer.token_to_id(tokenizer, array_end_token)
 addition_token_id = Bumblebee.Tokenizer.token_to_id(tokenizer, array_addition_token)
 string_token_id = Bumblebee.Tokenizer.token_to_id(tokenizer, string_token)
 end_of_sequence_token_id = Bumblebee.Tokenizer.special_token_id(tokenizer, :eos)
 
 special_tokens_ids = for token_id <- 0..17, do: token_id
 number_tokens_ids = Enum.map(numbers, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
-vocabulary_token_ids = for token_id <- 0..model_info.vocabulary_size, do: token_id
+vocabulary_token_ids = for token_id <- 0..model_info.spec.vocab_size, do: token_id
 
-string_token_ids = vocabulary_token_ids -- [string_token_id] -- special_tokens_ids 
+string_token_ids = vocabulary_token_ids -- ([string_token_id] -- special_tokens_ids)
 
-## transitions
-transitions = %{
+## which tokens are allowed
+allowed_token_ids_for_state = %{
   starting: [array_start_token_id],
-  in_array: number_tokens_ids ++ [array_end_token_id, string_token_id], # todo start string token
-  in_number: number_tokens_ids ++ [addition_token_id, end_token_id],
+  # todo start string token
+  in_array: number_tokens_ids ++ [array_end_token_id, string_token_id],
+  in_number: number_tokens_ids ++ [addition_token_id, array_end_token_id],
   in_addition: number_tokens_ids ++ [string_token_id],
   in_string: string_token_ids ++ [string_token_id],
   end_of_string: [addition_token_id, array_end_token_id],
@@ -81,32 +85,45 @@ transitions = %{
 ## end_of_string (5)
 ## ending (6)
 
-
-## states
-states =
-  %{
-    starting: [],
-    in_array: [array_start_token_id],
-    in_number: number_token_ids,
-    in_addition: [addition_token_id],
-    in_string: [string_token_id],
-    end_of_string: [string_token_id],
-    ending: [array_end_token_id]
-  }
-  |> Enum.flat_map(fn {state, tensor_ids} ->
+## which tokens lead to which state from given state
+state_transitions =
+  [
+    # starting
+    {:starting, [array_start_token_id], :in_array},
+    # in_array
+    {:in_array, number_tokens_ids, :in_number},
+    {:in_array, [array_end_token_id], :ending},
+    {:in_array, [string_token_id], :in_string},
+    # in_number
+    {:in_number, number_tokens_ids, :in_number},
+    {:in_number, [addition_token_id], :in_array},
+    {:in_number, [array_end_token_id], :ending},
+    # in_addition
+    {:in_addition, number_tokens_ids, :in_addition},
+    {:in_addition, [string_token_id], :in_string},
+    # in_string
+    {:in_string, string_token_ids, :in_string},
+    {:in_string, [string_token_id], :end_of_string},
+    # end_of_string
+    {:end_of_string, [addition_token_id], :in_addition},
+    {:end_of_string, [array_end_token_id], :ending}
+    # ending
+    # {:ending, [], :ending}
+  ]
+  |> Enum.flat_map(fn {current_state, tensor_ids, next_state} ->
     for tensor_id <- tensor_ids do
-      {tensor_id, states_to_num[state]}
+      {state_to_num.(current_state), tensor_id, state_to_num.(next_state)}
     end
   end)
 
 dfa = %{
-  states: states,
-  transitions: transitions
+  state_transitions: state_transitions,
+  allowed_token_ids_for_state: allowed_token_ids_for_state
 }
 
 generation_config =
   Bumblebee.configure(generation_config,
-    max_new_tokens: 48,
+    max_new_tokens: 24,
     strategy: %{type: :multinomial_sampling, top_p: 0.6},
     dfa: dfa
   )

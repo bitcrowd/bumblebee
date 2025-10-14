@@ -7,27 +7,65 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
     opts = Keyword.validate!(opts, [:dfa])
     dfa = opts[:dfa]
 
-    transitions_max_length = Map.values(dfa.transitions) |> Enum.map(&length(&1)) |> Enum.max()
+    allowed_token_ids_max_length =
+      Map.values(dfa.allowed_token_ids_for_state)
+      |> Enum.map(&length(&1))
+      |> Enum.max()
 
-    transitions_tensor =
-      dfa.transitions
+    allowed_token_ids_tensor =
+      dfa.allowed_token_ids_for_state
       |> Enum.with_index()
       |> Enum.map(fn {{_state, token_ids}, index} -> {index, Nx.tensor(token_ids)} end)
       |> Enum.map(fn {_idx, tensor} ->
-        Nx.pad(tensor, -1, [{0, transitions_max_length - Nx.size(tensor), 0}])
+        Nx.pad(tensor, -1, [{0, allowed_token_ids_max_length - Nx.size(tensor), 0}])
       end)
       |> Nx.stack()
 
-    states_tensor = Nx.broadcast(-1, {Nx.size(logits)})
+    num_states = Map.keys(dfa.allowed_token_ids_for_state) |> length()
 
-    states_indices = Enum.map(dfa.states, fn {key, _value} -> key end) |> Nx.tensor()
-    states_indices = Nx.new_axis(states_indices, -1)
+    states_transition_tensor = Nx.broadcast(-1, {num_states, Nx.size(logits)})
 
-    states_states = Enum.map(dfa.states, fn {_key, state} -> state end) |> Nx.tensor()
+    states_transitions_tensor =
+      for {current_state, token_id, next_state} <- dfa.state_transitions,
+          reduce: states_transition_tensor do
+        states_transition_tensor ->
+          Nx.indexed_put(
+            states_transition_tensor,
+            Nx.tensor([current_state, token_id]),
+            next_state
+          )
+      end
 
-    states_tensor = Nx.indexed_put(states_tensor, states_indices, states_states)
+    initial_state = Nx.tensor([0]) |> Nx.vectorize(batch: 1)
 
-    state_logits(logits, context, transitions_tensor, states_tensor)
+    current_state =
+      find_current_state(
+        initial_state,
+        states_transitions_tensor,
+        context.sequence,
+        context.input_length,
+        context.length
+      )
+
+    allowed_tokens = allowed_token_ids_tensor[current_state]
+
+    allow_token_ids(logits, allowed_tokens)
+  end
+
+  defn find_current_state(initial_state, states_transitions_tensor, sequence, input_length, current_length) do
+    generated_length = current_length - input_length
+
+    {state, _i, _sequence, _input_length, _generated_length, _states_transitions_tensor} =
+      while {state = initial_state, i = 0, sequence, input_length, generated_length,
+             states_transitions_tensor},
+            Nx.less(i, generated_length) do
+        chosen_token = sequence[input_length + i]
+        new_state = states_transitions_tensor[[state, chosen_token]]
+        {new_state, i + 1, sequence, input_length, generated_length, states_transitions_tensor}
+      end
+
+
+    state
   end
 
   defn state_logits(logits, context, transitions_tensor, states_tensor) do
