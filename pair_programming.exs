@@ -20,54 +20,47 @@ Valid examples are:
 """
 
 numbers = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
-start_token = ["["]
-end_token = ["]"]
-addition_token = [","]
+array_start_token = ["["]
+array_end_token = ["]"]
+array_addition_token = [","]
+# String Token would require ! (like "everything, just without ....)
+string_token ="\"" # Token 18
 
-# states
-# * start_token -> start -> in_number, end -> numbers ++ end_token
-# * numbers -> in_number -> in_number, addition, end -> numbers ++ addition_token ++ end_token
-# * addition_token -> addition -> in_number -> numbers
-# * end_token -> end -> END_OF_SEQUENCE -> END_OF_SEQUENCE
 
-# {
-#   start: start_token,
-#   numbers: numbers,
-# }
-
-## am anfang war nix
-## -> Start token
-## last_state = inspect_last_token oder last state from stack
-
-## Am Anfang sind wir im start_token state und haben den start token schon
-## die nächsten kandidaten wählen
-## die große wahl
-## inpect current token -> determine which state was chosen
-## next loop
-
-## last token -> state
-
-end_of_sequence_token = Bumblebee.Tokenizer.special_token(tokenizer, :eos)
-
+# ToDo: should be a list -> idx
 states_to_num = %{
   starting: 0,
   in_array: 1,
   in_number: 2,
   in_addition: 3,
-  ending: 4
+  in_string: 4,
+  ending: 5
 }
+
+# ------------------------------------- above chars ------------------------------ #
+# ------------------------------------- below tokens ------------------------------ #
+
+end_of_sequence_token_ids = [Bumblebee.Tokenizer.special_token_id(tokenizer, :eos)]
+special_tokens_ids = for token_id <- 0..17, do: token_id
+
+array_start_token_ids = Enum.map(array_start_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+array_end_token_ids = Enum.map(array_end_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+addition_token_ids = Enum.map(array_addition_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+string_token_ids = Enum.map(string_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+
+number_tokens_ids = Enum.map(numbers, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+vocabulary_token_ids = for token_id <- 0..model_info.vocabulary_size, do: token_id
+forbidden_string_tokens_ids = string_token_ids -- special_tokens_ids --
+string_token_ids = vocabulary_token_ids -- forbidden_string_tokens_ids # including ", which ends the string
 
 ## transitions
 transitions = %{
-  starting: Enum.map(start_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1)),
-  in_array: Enum.map(numbers ++ end_token, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1)),
-  in_number:
-    Enum.map(
-      numbers ++ addition_token ++ end_token,
-      &Bumblebee.Tokenizer.token_to_id(tokenizer, &1)
-    ),
-  in_addition: Enum.map(numbers, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1)),
-  ending: Enum.map([end_of_sequence_token], &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+  starting: start_token_ids,
+  in_array: number_tokens_ids ++ end_token_ids ++ start_string_token_ids, # todo start string token
+  in_number: number_tokens_ids ++ addition_token_ids ++ end_token_ids,
+  in_addition: number_tokens_ids,
+  in_string: string_token_ids -- forbidden_strin_tokens_ids,
+  ending: end_of_sequence_token_ids
 }
 
 ## states
