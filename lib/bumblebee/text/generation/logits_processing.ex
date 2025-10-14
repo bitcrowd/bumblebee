@@ -7,39 +7,75 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
     opts = Keyword.validate!(opts, [:dfa])
     dfa = opts[:dfa]
 
-    ## figure out current state from context
-    current_state = figure_out_state(context, dfa)
+    transitions_max_length = Map.values(dfa.transitions) |> Enum.map(&length(&1)) |> Enum.max()
+
+    transitions_tensor =
+      dfa.transitions
+      |> Enum.with_index()
+      |> Enum.map(fn {{_state, token_ids}, index} -> {index, Nx.tensor(token_ids)} end)
+      |> Enum.map(fn {_idx, tensor} ->
+        Nx.pad(tensor, -1, [{0, transitions_max_length - Nx.size(tensor), 0}])
+      end)
+      |> Nx.stack()
+
+    states_tensor = Nx.broadcast(-1, {Nx.size(logits)})
+
+    states_indices = Enum.map(dfa.states, fn {key, _value} -> key end) |> Nx.tensor()
+    states_indices = Nx.new_axis(states_indices, -1)
+
+    states_states = Enum.map(dfa.states, fn {_key, state} -> state end) |> Nx.tensor()
+
+    states_tensor = Nx.indexed_put(states_tensor, states_indices, states_states)
+
+    state_logits(logits, context, transitions_tensor, states_tensor)
+  end
+
+  defn state_logits(logits, context, transitions_tensor, states_tensor) do
+    ## states tensor
+    ## 0 -> -1
+    ## ...
+    ## 75 -> 1 (in_array)
+    ## ..
+    current_state =
+      if context.length == context.input_length do
+        0
+      else
+        last_token = context.sequence[context.length - 1]
+        states_tensor[last_token]
+      end
+
     ## figure out allowed tokens for next sampling
-    allowed_tokens = dfa.transitions[current_state]
+
+    ## transition tensor
+    ## 0 -> token_ids for starting (padded to largest dimension)
+    ## 1 -> token_ids for in_array (padded to largest dimension)
+    ## ...
+    allowed_tokens = transitions_tensor[current_state]
+
     ## pass allowed tokens into allow_token_ids
+    # allow_token_ids(logits, allowed_tokens)
     allow_token_ids(logits, allowed_tokens)
   end
 
   ## figure out state from last token in context
-  deftransform figure_out_state(context, dfa) do
+  # deftransform figure_out_state(context, dfa) do
+  #   # _last_token = context.sequence[0]
 
-      last_token = context.sequence[0]
-      if context.length == 512 do
-        :starting
-        # if context.length == 1 do
-        #   dbg("hon, honk")
-        #   dbg(context.sequence)
-        #   :starting
-        # else
-        #   :in_number
-        #   # last_token = context.sequence[context.length - 1]
+  #   if context.length == 512 do
+  #     :starting
+  #   else
+  #     :in_number
+  #     last_token = context.sequence[context.length - 1]
 
-        #   # {state, _tokens} =
-        #   #   dfa.states
-        #   #   |> Enum.find(fn {_state, tokens} ->
-        #   #     last_token == nil || last_token in tokens
-        #   #   end)
+  #     {state, _tokens} =
+  #       dfa.states
+  #       |> Enum.find(fn {_state, tokens} ->
+  #         last_token == nil || last_token in tokens
+  #       end)
 
-        #   # state
-      else
-        :in_number
-      end
-  end
+  #     state
+  #   end
+  # end
 
   deftransform suppressed_tokens_processor(logits, _context, opts \\ []) do
     opts = Keyword.validate!(opts, [:suppressed_token_ids])
