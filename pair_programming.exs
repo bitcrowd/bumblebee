@@ -37,7 +37,8 @@ states = [
   :in_addition,
   :in_string,
   :end_of_string,
-  :ending
+  :ending,
+  :done
 ]
 
 state_to_num = fn state -> Enum.find_index(states, & &1 == state) end
@@ -57,18 +58,6 @@ vocabulary_token_ids = for token_id <- 0..model_info.spec.vocab_size, do: token_
 
 string_token_ids = vocabulary_token_ids -- ([string_token_id] -- special_tokens_ids)
 
-## which tokens are allowed
-allowed_token_ids_for_state = %{
-  starting: [array_start_token_id],
-  # todo start string token
-  in_array: number_tokens_ids ++ [array_end_token_id, string_token_id],
-  in_number: number_tokens_ids ++ [addition_token_id, array_end_token_id],
-  in_addition: number_tokens_ids ++ [string_token_id],
-  in_string: string_token_ids ++ [string_token_id],
-  end_of_string: [addition_token_id, array_end_token_id],
-  ending: [end_of_sequence_token_id]
-}
-
 ## sequence : 75, 33, 34, ...
 
 # State             0   1  
@@ -85,6 +74,7 @@ allowed_token_ids_for_state = %{
 ## in_string (4)
 ## end_of_string (5)
 ## ending (6)
+## done (7)
 
 ## which tokens lead to which state from given state
 state_transitions =
@@ -97,19 +87,19 @@ state_transitions =
     {:in_array, [string_token_id], :in_string},
     # in_number
     {:in_number, number_tokens_ids, :in_number},
-    {:in_number, [addition_token_id], :in_array},
+    {:in_number, [addition_token_id], :in_addition},
     {:in_number, [array_end_token_id], :ending},
     # in_addition
-    {:in_addition, number_tokens_ids, :in_addition},
+    {:in_addition, number_tokens_ids, :in_number},
     {:in_addition, [string_token_id], :in_string},
     # in_string
     {:in_string, string_token_ids, :in_string},
     {:in_string, [string_token_id], :end_of_string},
     # end_of_string
     {:end_of_string, [addition_token_id], :in_addition},
-    {:end_of_string, [array_end_token_id], :ending}
+    {:end_of_string, [array_end_token_id], :ending},
     # ending
-    # {:ending, [], :ending}
+    {:ending, [end_of_sequence_token_id], :done}
   ]
   |> Enum.flat_map(fn {current_state, tensor_ids, next_state} ->
     for tensor_id <- tensor_ids do
@@ -117,24 +107,7 @@ state_transitions =
     end
   end)
 
-ambiguous_token_ids =
-  state_transitions
-    |> Enum.map(fn {_current_state, tensor_id, next_state} -> {tensor_id, next_state} end)
-    |> Enum.dedup()
-    |> Enum.frequencies_by(fn {tensor_id, _state} -> tensor_id end)
-    |> Enum.filter(fn {_tensor_id, count} -> count > 1 end)
-    |> Enum.map(fn {tensor_id, _count} -> tensor_id end)
-
-simple_lookup = for {state, token_id, _next_state} <- state_transitions, token_id not in ambiguous_token_ids do
-    {token_id, state}
-  end
-
-dfa = %{
-  state_transitions: state_transitions,
-  allowed_token_ids_for_state: allowed_token_ids_for_state,
-  ambiguous_token_ids: ambiguous_token_ids,
-  simple_lookup: simple_lookup
-}
+dfa = %{ state_transitions: state_transitions, }
 
 generation_config =
   Bumblebee.configure(generation_config,
@@ -154,7 +127,7 @@ serving =
 
 # IO.puts result.text
 
-
+run_benchmarks = fn ->
 serving_fn = fn max_new_tokens, dfa ->
           generation_config =
             Bumblebee.configure(generation_config,
@@ -190,5 +163,6 @@ Benchee.run(
   time: 30,
   memory_time: 2
 )
+end
 
 

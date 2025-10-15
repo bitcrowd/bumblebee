@@ -7,192 +7,87 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
     opts = Keyword.validate!(opts, [:dfa])
     dfa = opts[:dfa]
 
-    allowed_token_ids_max_length =
-      Map.values(dfa.allowed_token_ids_for_state)
-      |> Enum.map(&length(&1))
-      |> Enum.max()
+    num_states =
+      Enum.dedup_by(dfa.state_transitions, fn {state, _token_id, _next_state} -> state end)
+      |> length()
 
-    allowed_token_ids_tensor =
-      dfa.allowed_token_ids_for_state
-      |> Enum.with_index()
-      |> Enum.map(fn {{_state, token_ids}, index} -> {index, Nx.tensor(token_ids)} end)
-      |> Enum.map(fn {_idx, tensor} ->
-        Nx.pad(tensor, -1, [{0, allowed_token_ids_max_length - Nx.size(tensor), 0}])
-      end)
-      |> Nx.stack()
+    state_transition_tensor = Nx.broadcast(0, {num_states, Nx.size(logits)})
 
-    num_states = Map.keys(dfa.allowed_token_ids_for_state) |> length()
-
-    states_transition_tensor = Nx.broadcast(-1, {num_states, Nx.size(logits)})
-
-    states_transitions_tensor =
+    state_transitions_tensor =
       for {current_state, token_id, next_state} <- dfa.state_transitions,
-          reduce: states_transition_tensor do
-        states_transition_tensor ->
+          reduce: state_transition_tensor do
+        state_transition_tensor ->
           Nx.indexed_put(
-            states_transition_tensor,
+            state_transition_tensor,
             Nx.tensor([current_state, token_id]),
             next_state
           )
       end
 
+    initial_state = Nx.tensor([0]) |> Nx.vectorize(batch: 1)
+
     current_state =
-      if dfa[:ambiguous_token_ids] do
-        ambiguous_token_ids = Nx.tensor(dfa.ambiguous_token_ids)
+      find_current_state(
+        initial_state,
+        state_transitions_tensor,
+        context.sequence,
+        context.input_length,
+        context.length
+      )
 
-        {token_ids, states} = Enum.unzip(dfa.simple_lookup)
+    suppressed_logits = Nx.fill(logits, Nx.Constants.neg_infinity(), type: Nx.type(logits))
+    logits = Nx.select(state_transitions_tensor[current_state], logits, suppressed_logits)
 
-        token_ids =
-          Nx.tensor(token_ids)
-          |> Nx.new_axis(-1)
-
-        states = Nx.tensor(states)
-
-        simple_lookup =
-          Nx.broadcast(-1, {Nx.size(logits)})
-          |> Nx.indexed_put(token_ids, states)
-
-        initial_state = Nx.tensor([0]) |> Nx.vectorize(batch: 1)
-
-        find_current_state_with_skip(
-          initial_state,
-          states_transitions_tensor,
-          context.sequence,
-          context.input_length,
-          context.length,
-          ambiguous_token_ids,
-          simple_lookup
-        )
-      else
-        initial_state = Nx.tensor([0]) |> Nx.vectorize(batch: 1)
-
-        find_current_state(
-          initial_state,
-          states_transitions_tensor,
-          context.sequence,
-          context.input_length,
-          context.length
-        )
-      end
-
-    allowed_tokens = allowed_token_ids_tensor[current_state]
-
-    allow_token_ids(logits, allowed_tokens)
-  end
-
-  defn find_current_state_with_skip(
-         initial_state,
-         states_transitions_tensor,
-         sequence,
-         input_length,
-         current_length,
-         ambiguous_token_ids,
-         simple_lookup
-       ) do
-    generated_length = current_length - input_length
-    last_token_id = sequence[current_length]
-
-    state =
-      cond do
-        generated_length == 0 ->
-          initial_state
-
-        Nx.any(Nx.equal(last_token_id, ambiguous_token_ids)) ->
-          {state, _i, _sequence, _input_length, _generated_length, _states_transitions_tensor} =
-            while {state = initial_state, i = 0, sequence, input_length, generated_length,
-                   states_transitions_tensor},
-                  Nx.less(i, generated_length) do
-              chosen_token = sequence[input_length + i]
-              new_state = states_transitions_tensor[[state, chosen_token]]
-
-              {new_state, i + 1, sequence, input_length, generated_length,
-               states_transitions_tensor}
-            end
-
-          state
-
-        true ->
-          simple_lookup[last_token_id]
-      end
-
-    state
+    logits
   end
 
   defn find_current_state(
          initial_state,
-         states_transitions_tensor,
+         state_transitions_tensor,
          sequence,
          input_length,
          current_length
        ) do
     generated_length = current_length - input_length
 
-    cond do
-      generated_length == 0 ->
-        initial_state
+    last_token_id = sequence[current_length]
+    token_column = state_transitions_tensor[[.., last_token_id]] |> Nx.squeeze()
 
-      true ->
-        {state, _i, _sequence, _input_length, _generated_length, _states_transitions_tensor} =
-          while {state = initial_state, i = 0, sequence, input_length, generated_length,
-                 states_transitions_tensor},
-                Nx.less(i, generated_length) do
-            chosen_token = sequence[input_length + i]
-            new_state = states_transitions_tensor[[state, chosen_token]]
+    # top_k gives two top values + indices of the column
+    # if the token is unambiguous, there is only one value != 0 in the column (that's top_values[0])
+    # if top_values[1] != 0, there must be two values != 0 in the column, so it's ambiguous 
+    {top_values, top_indices} = Nx.top_k(token_column, k: 2)
 
-            {new_state, i + 1, sequence, input_length, generated_length,
-             states_transitions_tensor}
-          end
+    ambiguous_token? = Nx.logical_not(top_values[1])
 
-        state
-    end
-  end
+    state =
+      cond do
+        generated_length == 0 ->
+          initial_state
 
-  defn state_logits(logits, context, transitions_tensor, states_tensor) do
-    ## states tensor
-    ## 0 -> -1
-    ## ...
-    ## 75 -> 1 (in_array)
-    ## ..
-    current_state =
-      if context.length == context.input_length do
-        0
-      else
-        last_token = context.sequence[context.length - 1]
-        states_tensor[last_token]
+        ambiguous_token? ->
+          {state, _i, _sequence, _input_length, _generated_length, _states_transitions_tensor} =
+            while {state = initial_state, i = 0, sequence, input_length, generated_length,
+                   state_transitions_tensor},
+                  Nx.less(i, generated_length) do
+              chosen_token = sequence[input_length + i]
+              new_state = state_transitions_tensor[[state, chosen_token]]
+
+              {new_state, i + 1, sequence, input_length, generated_length,
+               state_transitions_tensor}
+            end
+
+          state
+
+        true ->
+          # we know that top_indices[0] is the row index for the only token id != 0
+          # this is our new state!
+          top_indices[0]
       end
 
-    ## figure out allowed tokens for next sampling
-
-    ## transition tensor
-    ## 0 -> token_ids for starting (padded to largest dimension)
-    ## 1 -> token_ids for in_array (padded to largest dimension)
-    ## ...
-    allowed_tokens = transitions_tensor[current_state]
-
-    ## pass allowed tokens into allow_token_ids
-    # allow_token_ids(logits, allowed_tokens)
-    allow_token_ids(logits, allowed_tokens)
+    print_value(state, label: "state")
+    # state
   end
-
-  ## figure out state from last token in context
-  # deftransform figure_out_state(context, dfa) do
-  #   # _last_token = context.sequence[0]
-
-  #   if context.length == 512 do
-  #     :starting
-  #   else
-  #     :in_number
-  #     last_token = context.sequence[context.length - 1]
-
-  #     {state, _tokens} =
-  #       dfa.states
-  #       |> Enum.find(fn {_state, tokens} ->
-  #         last_token == nil || last_token in tokens
-  #       end)
-
-  #     state
-  #   end
-  # end
 
   deftransform suppressed_tokens_processor(logits, _context, opts \\ []) do
     opts = Keyword.validate!(opts, [:suppressed_token_ids])
