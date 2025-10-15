@@ -36,36 +36,115 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
           )
       end
 
-    initial_state = Nx.tensor([0]) |> Nx.vectorize(batch: 1)
-
     current_state =
-      find_current_state(
-        initial_state,
-        states_transitions_tensor,
-        context.sequence,
-        context.input_length,
-        context.length
-      )
+      if dfa[:ambiguous_token_ids] do
+        ambiguous_token_ids = Nx.tensor(dfa.ambiguous_token_ids)
+
+        {token_ids, states} = Enum.unzip(dfa.simple_lookup)
+
+        token_ids =
+          Nx.tensor(token_ids)
+          |> Nx.new_axis(-1)
+
+        states = Nx.tensor(states)
+
+        simple_lookup =
+          Nx.broadcast(-1, {Nx.size(logits)})
+          |> Nx.indexed_put(token_ids, states)
+
+        initial_state = Nx.tensor([0]) |> Nx.vectorize(batch: 1)
+
+        find_current_state_with_skip(
+          initial_state,
+          states_transitions_tensor,
+          context.sequence,
+          context.input_length,
+          context.length,
+          ambiguous_token_ids,
+          simple_lookup
+        )
+      else
+        initial_state = Nx.tensor([0]) |> Nx.vectorize(batch: 1)
+
+        find_current_state(
+          initial_state,
+          states_transitions_tensor,
+          context.sequence,
+          context.input_length,
+          context.length
+        )
+      end
 
     allowed_tokens = allowed_token_ids_tensor[current_state]
 
     allow_token_ids(logits, allowed_tokens)
   end
 
-  defn find_current_state(initial_state, states_transitions_tensor, sequence, input_length, current_length) do
+  defn find_current_state_with_skip(
+         initial_state,
+         states_transitions_tensor,
+         sequence,
+         input_length,
+         current_length,
+         ambiguous_token_ids,
+         simple_lookup
+       ) do
     generated_length = current_length - input_length
+    last_token_id = sequence[current_length]
 
-    {state, _i, _sequence, _input_length, _generated_length, _states_transitions_tensor} =
-      while {state = initial_state, i = 0, sequence, input_length, generated_length,
-             states_transitions_tensor},
-            Nx.less(i, generated_length) do
-        chosen_token = sequence[input_length + i]
-        new_state = states_transitions_tensor[[state, chosen_token]]
-        {new_state, i + 1, sequence, input_length, generated_length, states_transitions_tensor}
+    state =
+      cond do
+        generated_length == 0 ->
+          initial_state
+
+        Nx.any(Nx.equal(last_token_id, ambiguous_token_ids)) ->
+          {state, _i, _sequence, _input_length, _generated_length, _states_transitions_tensor} =
+            while {state = initial_state, i = 0, sequence, input_length, generated_length,
+                   states_transitions_tensor},
+                  Nx.less(i, generated_length) do
+              chosen_token = sequence[input_length + i]
+              new_state = states_transitions_tensor[[state, chosen_token]]
+
+              {new_state, i + 1, sequence, input_length, generated_length,
+               states_transitions_tensor}
+            end
+
+          state
+
+        true ->
+          simple_lookup[last_token_id]
       end
 
-
     state
+  end
+
+  defn find_current_state(
+         initial_state,
+         states_transitions_tensor,
+         sequence,
+         input_length,
+         current_length
+       ) do
+    generated_length = current_length - input_length
+
+    cond do
+      generated_length == 0 ->
+        initial_state
+
+      true ->
+        {state, _i, _sequence, _input_length, _generated_length, _states_transitions_tensor} =
+          while {state = initial_state, i = 0, sequence, input_length, generated_length,
+                 states_transitions_tensor},
+                Nx.less(i, generated_length) do
+            chosen_token = sequence[input_length + i]
+            new_state = states_transitions_tensor[[state, chosen_token]]
+
+            {new_state, i + 1, sequence, input_length, generated_length,
+             states_transitions_tensor}
+          end
+
+        state
+    end
   end
 
   defn state_logits(logits, context, transitions_tensor, states_tensor) do

@@ -116,9 +116,23 @@ state_transitions =
     end
   end)
 
+ambiguous_token_ids =
+  state_transitions
+    |> Enum.map(fn {_current_state, tensor_id, next_state} -> {tensor_id, next_state} end)
+    |> Enum.dedup()
+    |> Enum.frequencies_by(fn {tensor_id, _state} -> tensor_id end)
+    |> Enum.filter(fn {_tensor_id, count} -> count > 1 end)
+    |> Enum.map(fn {tensor_id, _count} -> tensor_id end)
+
+simple_lookup = for {state, token_id, _next_state} <- state_transitions, token_id not in ambiguous_token_ids do
+    {token_id, state}
+  end
+
 dfa = %{
   state_transitions: state_transitions,
-  allowed_token_ids_for_state: allowed_token_ids_for_state
+  allowed_token_ids_for_state: allowed_token_ids_for_state,
+  ambiguous_token_ids: ambiguous_token_ids,
+  simple_lookup: simple_lookup
 }
 
 generation_config =
