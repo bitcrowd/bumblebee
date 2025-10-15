@@ -41,7 +41,7 @@ states = [
   :done
 ]
 
-state_to_num = fn state -> Enum.find_index(states, & &1 == state) end
+state_to_num = fn state -> Enum.find_index(states, &(&1 == state)) end
 
 # ------------------------------------- above chars ------------------------------ #
 # ------------------------------------- below tokens ------------------------------ #
@@ -107,7 +107,7 @@ state_transitions =
     end
   end)
 
-dfa = %{ state_transitions: state_transitions, }
+dfa = %{state_transitions: state_transitions}
 
 generation_config =
   Bumblebee.configure(generation_config,
@@ -123,46 +123,36 @@ serving =
     defn_options: [compiler: Nx.Defn.Evaluator]
   )
 
-%{results: [_result]} =  Nx.Serving.run(serving, prompt) |> dbg
+%{results: [_result]} = Nx.Serving.run(serving, prompt) |> dbg
 
 # IO.puts result.text
 
 run_benchmarks = fn ->
-serving_fn = fn max_new_tokens, dfa ->
-          generation_config =
-            Bumblebee.configure(generation_config,
-              max_new_tokens: max_new_tokens,
-              strategy: %{type: :multinomial_sampling, top_p: 0.6},
-              dfa: dfa
-            )
+  serving_fn = fn max_new_tokens, dfa ->
+    generation_config =
+      Bumblebee.configure(generation_config,
+        max_new_tokens: max_new_tokens,
+        strategy: %{type: :multinomial_sampling, top_p: 0.6},
+        dfa: dfa
+      )
 
-            Bumblebee.Text.generation(model_info, tokenizer, generation_config,
-                compile: [batch_size: 1, sequence_length: sequence_length],
-                stream: false,
-                defn_options: [compiler: Nx.Defn.Evaluator]
-              )
+    Bumblebee.Text.generation(model_info, tokenizer, generation_config,
+      compile: [batch_size: 1, sequence_length: sequence_length],
+      stream: false,
+      defn_options: [compiler: Nx.Defn.Evaluator]
+    )
+  end
 
-          end
-
-serving_dfa_8 = serving_fn.(8, dfa)
-serving_dfa_16 = serving_fn.(16, dfa)
-serving_dfa_8_no_skip = serving_fn.(8, Map.delete(dfa, :ambiguous_token_ids))
-serving_dfa_16_no_skip = serving_fn.(16, Map.delete(dfa, :ambiguous_token_ids))
-serving_no_dfa_8 = serving_fn.(8, nil)
-serving_no_dfa_16 = serving_fn.(16, nil)
-
-Benchee.run(
-  %{
-    "max_new_tokens = 8" => fn ->  Nx.Serving.run(serving_dfa_8, prompt) end,
-    "max_new_tokens = 16" => fn ->  Nx.Serving.run(serving_dfa_16, prompt) end,
-    "no skip: max_new_tokens = 8" => fn ->  Nx.Serving.run(serving_dfa_8_no_skip, prompt) end,
-    "no skip: max_new_tokens = 16" => fn ->  Nx.Serving.run(serving_dfa_16_no_skip, prompt) end,
-    "no dfa: max_new_tokens = 8" => fn ->  Nx.Serving.run(serving_no_dfa_8, prompt) end,
-    "no dfa: max_new_tokens = 16" => fn ->  Nx.Serving.run(serving_no_dfa_16, prompt) end,
-  },
-  time: 30,
-  memory_time: 2
-)
+  # Benchee.run(
+  #   %{
+  # "max_new_tokens = 8" => fn ->  Nx.Serving.run(serving_dfa_8, prompt) end,
+  # "max_new_tokens = 16" => fn ->  Nx.Serving.run(serving_dfa_16, prompt) end,
+  # "no skip: max_new_tokens = 8" => fn ->  Nx.Serving.run(serving_dfa_8_no_skip, prompt) end,
+  # "no skip: max_new_tokens = 16" => fn ->  Nx.Serving.run(serving_dfa_16_no_skip, prompt) end,
+  # "no dfa: max_new_tokens = 8" => fn ->  Nx.Serving.run(serving_no_dfa_8, prompt) end,
+  # "no dfa: max_new_tokens = 16" => fn ->  Nx.Serving.run(serving_no_dfa_16, prompt) end,
+  #   },
+  #   time: 30,
+  #   memory_time: 2
+  # )
 end
-
-

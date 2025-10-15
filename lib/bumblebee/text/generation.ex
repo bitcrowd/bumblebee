@@ -638,14 +638,17 @@ defmodule Bumblebee.Text.Generation do
   end
 
   defnp batch_process_logits(logits_processor_fun, logits, state) do
-    logits
-    |> Nx.vectorize(:batch)
-    |> logits_processor_fun.(%{
-      sequence: Nx.vectorize(state.sequences, :batch),
-      length: state.length,
-      input_length: state.input_length
-    })
-    |> Nx.devectorize(keep_names: false)
+    case logits
+         |> Nx.vectorize(:batch)
+         |> logits_processor_fun.(%{
+           sequence: Nx.vectorize(state.sequences, :batch),
+           length: state.length,
+           input_length: state.input_length,
+           last_state: state[:last]
+         }) do
+      {logits, new_state} -> {Nx.devectorize(logits, keep_names: false), new_state}
+      logits -> Nx.devectorize(logits, keep_names: false)
+    end
   end
 
   # Contrastive search
@@ -894,7 +897,15 @@ defmodule Bumblebee.Text.Generation do
     outputs = predict_fun.(params, inputs)
 
     logits = outputs.logits[[.., -1]]
-    logits = batch_process_logits(logits_processor_fun, logits, state)
+
+    {logits, new_state} =
+      case batch_process_logits(logits_processor_fun, logits, state) do
+        {logits, new_state} -> {logits, new_state}
+        logits -> {logits, state}
+      end
+
+    state = Map.merge(state, new_state)
+
     scores = Axon.Activations.softmax(logits)
     token_id = batched_choice(key, scores)
 

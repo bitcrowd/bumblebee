@@ -11,6 +11,7 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
       Enum.dedup_by(dfa.state_transitions, fn {state, _token_id, _next_state} -> state end)
       |> length()
 
+
     state_transition_tensor = Nx.broadcast(0, {num_states, Nx.size(logits)})
 
     state_transitions_tensor =
@@ -26,19 +27,20 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
 
     initial_state = Nx.tensor([0]) |> Nx.vectorize(batch: 1)
 
-    current_state =
-      find_current_state(
-        initial_state,
-        state_transitions_tensor,
-        context.sequence,
-        context.input_length,
-        context.length
-      )
+    last_state =
+      if last_state = context[:last_state] do
+        Nx.tensor([last_state]) |> Nx.vectorize(batch: 1)
+      else
+        initial_state
+      end
+
+    last_token_id = context.sequence[context.length]
+    current_state = state_transitions_tensor[[last_state, last_token_id]] |> Nx.squeeze()
 
     suppressed_logits = Nx.fill(logits, Nx.Constants.neg_infinity(), type: Nx.type(logits))
     logits = Nx.select(state_transitions_tensor[current_state], logits, suppressed_logits)
 
-    logits
+    {logits, current_state}
   end
 
   defn find_current_state(
