@@ -1,7 +1,8 @@
 Mix.install([
   {:bumblebee, path: "../bumblebee_bitcrowd"},
   {:nx, "~> 0.10.0", override: true},
-  {:emlx, github: "elixir-nx/emlx"}
+  {:emlx, github: "elixir-nx/emlx"},
+  {:benchee, "~> 1.0"}
 ])
 
 Nx.global_default_backend({EMLX.Backend, device: :gpu})
@@ -149,7 +150,45 @@ serving =
     defn_options: [compiler: Nx.Defn.Evaluator]
   )
 
-{:ok, _pid} =
-  Supervisor.start_link([{Nx.Serving, name: Serving, serving: serving}], strategy: :one_for_one)
+%{results: [_result]} =  Nx.Serving.run(serving, prompt) |> dbg
 
-Nx.Serving.run(serving, prompt) |> dbg
+# IO.puts result.text
+
+
+serving_fn = fn max_new_tokens, dfa ->
+          generation_config =
+            Bumblebee.configure(generation_config,
+              max_new_tokens: max_new_tokens,
+              strategy: %{type: :multinomial_sampling, top_p: 0.6},
+              dfa: dfa
+            )
+
+            Bumblebee.Text.generation(model_info, tokenizer, generation_config,
+                compile: [batch_size: 1, sequence_length: sequence_length],
+                stream: false,
+                defn_options: [compiler: Nx.Defn.Evaluator]
+              )
+
+          end
+
+serving_dfa_8 = serving_fn.(8, dfa)
+serving_dfa_16 = serving_fn.(16, dfa)
+serving_dfa_8_no_skip = serving_fn.(8, Map.delete(dfa, :ambiguous_token_ids))
+serving_dfa_16_no_skip = serving_fn.(16, Map.delete(dfa, :ambiguous_token_ids))
+serving_no_dfa_8 = serving_fn.(8, nil)
+serving_no_dfa_16 = serving_fn.(16, nil)
+
+Benchee.run(
+  %{
+    "max_new_tokens = 8" => fn ->  Nx.Serving.run(serving_dfa_8, prompt) end,
+    "max_new_tokens = 16" => fn ->  Nx.Serving.run(serving_dfa_16, prompt) end,
+    "no skip: max_new_tokens = 8" => fn ->  Nx.Serving.run(serving_dfa_8_no_skip, prompt) end,
+    "no skip: max_new_tokens = 16" => fn ->  Nx.Serving.run(serving_dfa_16_no_skip, prompt) end,
+    "no dfa: max_new_tokens = 8" => fn ->  Nx.Serving.run(serving_no_dfa_8, prompt) end,
+    "no dfa: max_new_tokens = 16" => fn ->  Nx.Serving.run(serving_no_dfa_16, prompt) end,
+  },
+  time: 30,
+  memory_time: 2
+)
+
+
