@@ -58,7 +58,7 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
     # if top_values[1] != 0, there must be two values != 0 in the column, so it's ambiguous 
     {top_values, top_indices} = Nx.top_k(token_column, k: 2)
 
-    ambiguous_token? = Nx.logical_not(top_values[1])
+    ambiguous_token? = Nx.not_equal(top_values[1], Nx.tensor(0))
 
     state =
       cond do
