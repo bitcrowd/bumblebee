@@ -85,8 +85,7 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
           top_indices[0]
       end
 
-    print_value(state, label: "state")
-    # state
+    state
   end
 
   deftransform suppressed_tokens_processor(logits, _context, opts \\ []) do

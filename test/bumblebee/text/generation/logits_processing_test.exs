@@ -13,17 +13,16 @@ defmodule Bumblebee.Text.Generation.LogitsProcessingTest do
       ##            2  2  0  0
       ## token 1 is ambiguous 
       ambiguous_token_id = 1
-      state_transitions_tensor = Nx.tensor([[0,1,2,3], [1, 3, 0, 0], [2, 2, 0, 0 ]]) |> dbg
-      token_column = state_transitions_tensor[[.., ambiguous_token_id]] |> Nx.squeeze() |> dbg
-      {top_values, top_indices} = Nx.top_k(token_column, k: 2) |> dbg
+      state_transitions_tensor = Nx.tensor([[0, 1, 2, 3], [1, 3, 0, 0], [2, 2, 0, 0]])
+      token_column = state_transitions_tensor[[.., ambiguous_token_id]] |> Nx.squeeze()
+      {top_values, top_indices} = Nx.top_k(token_column, k: 2)
 
-      ambiguous_token? = top_values[1] |> dbg
+      ambiguous_token? = top_values[1]
 
-      # assert(ambiguous_token?, Nx.tensor(1))
       assert Nx.not_equal(ambiguous_token?, Nx.tensor(0))
-      # assert Nx.tensor(0)
     end
   end
+
   describe "suppressed_tokens_processor/3" do
     test "ignores the given tokens" do
       logits = Nx.tensor([1.0, 2.0, 3.0, 4.0])
