@@ -56,7 +56,7 @@ special_tokens_ids = for token_id <- 0..17, do: token_id
 number_tokens_ids = Enum.map(numbers, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
 vocabulary_token_ids = for token_id <- 0..model_info.spec.vocab_size, do: token_id
 
-string_token_ids = vocabulary_token_ids -- [string_token_id] -- special_tokens_ids
+string_token_ids = vocabulary_token_ids -- ([string_token_id] ++ special_tokens_ids)
 
 ## sequence : 75, 33, 34, ...
 
