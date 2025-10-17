@@ -50,7 +50,7 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
        ) do
     generated_length = current_length - input_length
 
-    last_token_id = sequence[current_length]
+    last_token_id = sequence[current_length - 1]
     token_column = state_transitions_tensor[[.., last_token_id]] |> Nx.squeeze()
 
     # top_k gives two top values + indices of the column
