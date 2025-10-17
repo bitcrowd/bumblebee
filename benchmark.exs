@@ -1,0 +1,274 @@
+Mix.install([
+  {:bumblebee, path: "../bumblebee_bitcrowd"},
+  {:nx, "~> 0.10.0", override: true},
+  {:exla, "~> 0.10.0"},
+  {:emlx, github: "elixir-nx/emlx"},
+  {:benchee, "~> 1.0"}
+])
+
+repo = {:hf, "HuggingFaceTB/SmolLM2-135M-Instruct"}
+{:ok, model_info} = Bumblebee.load_model(repo)
+
+{:ok, tokenizer} = Bumblebee.load_tokenizer(repo)
+
+sequence_length = 512
+
+prompt = """
+Give me an array that contains a mix of numbers and text.
+There MUST be at least one number and one text.
+Valid examples are:
+
+["hello",89,"hola",6,4,8]
+"""
+
+numbers = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
+array_start_token = "["
+array_end_token = "]"
+array_addition_token = ","
+# String Token would require ! (like "everything, just without ....)
+# Token 18
+string_token = "\""
+
+states = [
+  :starting,
+  :in_array,
+  :in_number,
+  :in_addition,
+  :in_string,
+  :end_of_string,
+  :ending,
+  :done
+]
+
+state_to_num = fn state -> Enum.find_index(states, &(&1 == state)) end
+
+# ------------------------------------- above chars ------------------------------ #
+# ------------------------------------- below tokens ------------------------------ #
+
+array_start_token_id = Bumblebee.Tokenizer.token_to_id(tokenizer, array_start_token)
+array_end_token_id = Bumblebee.Tokenizer.token_to_id(tokenizer, array_end_token)
+addition_token_id = Bumblebee.Tokenizer.token_to_id(tokenizer, array_addition_token)
+string_token_id = Bumblebee.Tokenizer.token_to_id(tokenizer, string_token)
+end_of_sequence_token_id = Bumblebee.Tokenizer.special_token_id(tokenizer, :eos)
+
+special_tokens_ids = for token_id <- 0..17, do: token_id
+number_tokens_ids = Enum.map(numbers, &Bumblebee.Tokenizer.token_to_id(tokenizer, &1))
+vocabulary_token_ids = for token_id <- 0..model_info.spec.vocab_size, do: token_id
+
+string_token_ids = vocabulary_token_ids -- ([string_token_id] -- special_tokens_ids)
+
+## sequence : 75, 33, 34, ...
+
+# State             0   1  
+# chosen Token id  75  18  
+# new state         1   3  
+
+## tensor
+# State/token ids -> new state
+## State / Token ids   0  1  2  ... 18 ... 33 ... 75  76       
+## starting (0)       -1 -1 -1      -1     -1      1
+## in_array (1)                      4      2          6 
+## in_number (2)
+## in_addition (3)
+## in_string (4)
+## end_of_string (5)
+## ending (6)
+## done (7)
+
+## which tokens lead to which state from given state
+state_transitions =
+  [
+    # starting
+    {:starting, [array_start_token_id], :in_array},
+    # in_array
+    {:in_array, number_tokens_ids, :in_number},
+    {:in_array, [array_end_token_id], :ending},
+    {:in_array, [string_token_id], :in_string},
+    # in_number
+    {:in_number, number_tokens_ids, :in_number},
+    {:in_number, [addition_token_id], :in_addition},
+    # {:in_number, [array_end_token_id], :ending},
+    # in_addition
+    {:in_addition, number_tokens_ids, :in_number},
+    {:in_addition, [string_token_id], :in_string},
+    # in_string
+    {:in_string, string_token_ids, :in_string},
+    {:in_string, [string_token_id], :end_of_string},
+    # end_of_string
+    {:end_of_string, [addition_token_id], :in_addition}
+    # {:end_of_string, [array_end_token_id], :ending},
+    # # ending
+    # {:ending, [end_of_sequence_token_id], :done}
+  ]
+  |> Enum.flat_map(fn {current_state, tensor_ids, next_state} ->
+    for tensor_id <- tensor_ids do
+      {state_to_num.(current_state), tensor_id, state_to_num.(next_state)}
+    end
+  end)
+
+dfa = %{state_transitions: state_transitions, mode: :stateful, initial_state: 0}
+
+build_serving = fn backend, compiler, max_new_tokens, dfa ->
+  Nx.global_default_backend(backend)
+
+  {:ok, model_info} = Bumblebee.load_model(repo, backend: backend)
+
+  {:ok, tokenizer} = Bumblebee.load_tokenizer(repo)
+  {:ok, generation_config} = Bumblebee.load_generation_config(repo)
+
+  generation_config =
+    Bumblebee.configure(generation_config,
+      max_new_tokens: max_new_tokens,
+      min_length: sequence_length + max_new_tokens,
+      strategy: %{type: :multinomial_sampling, top_p: 0.6},
+      dfa: dfa
+    )
+
+    Bumblebee.Text.generation(model_info, tokenizer, generation_config,
+      compile: [batch_size: 1, sequence_length: sequence_length],
+      stream: false,
+      defn_options: [compiler: compiler]
+    )
+end
+
+Benchee.run(
+  %{
+    ## regular sampling
+    "Regular Sampling, EMLX" => {
+      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
+      before_scenario: fn max_new_tokens ->
+        backend = EMLX.Backend
+        compiler = Nx.Defn.Evaluator
+        max_new_tokens = max_new_tokens 
+        dfa = nil
+
+        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
+
+        Nx.Serving.run(serving, prompt)
+
+        {max_new_tokens, serving}
+      end
+    },
+    "Regular Sampling, EXLA with Evaluator" => {
+      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
+      before_scenario: fn max_new_tokens ->
+        backend = EXLA.Backend
+        compiler = Nx.Defn.Evaluator
+        max_new_tokens = max_new_tokens
+        dfa = nil
+        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
+
+        Nx.Serving.run(serving, prompt)
+
+        {max_new_tokens, serving}
+      end
+    },
+    "Regular Sampling, EXLA with Compiler" => {
+      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
+      before_scenario: fn max_new_tokens ->
+        backend = EXLA.Backend
+        compiler = EXLA
+        max_new_tokens = max_new_tokens
+        dfa = nil
+        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
+
+        Nx.Serving.run(serving, prompt)
+
+        {max_new_tokens, serving}
+      end
+    },
+    ## stateless constrained sampling
+    "Stateless Constrained Sampling, EMLX" => {
+      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
+      before_scenario: fn max_new_tokens ->
+        backend = EMLX.Backend
+        compiler = Nx.Defn.Evaluator
+        max_new_tokens = max_new_tokens
+        dfa = %{dfa | mode: :stateless}
+        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
+
+        Nx.Serving.run(serving, prompt)
+
+        {max_new_tokens, serving}
+      end
+    },
+    "Stateless Constrained Sampling, EXLA with Evaluator" => {
+      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
+      before_scenario: fn max_new_tokens ->
+        backend = EXLA.Backend
+        compiler = Nx.Defn.Evaluator
+        max_new_tokens = max_new_tokens
+        dfa = %{dfa | mode: :stateless}
+        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
+
+        Nx.Serving.run(serving, prompt)
+
+        {max_new_tokens, serving}
+      end
+    },
+    "Stateless Constrained Sampling, EXLA with Compiler" => {
+      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
+      before_scenario: fn max_new_tokens ->
+        backend = EXLA.Backend
+        compiler = EXLA
+        max_new_tokens = max_new_tokens
+        dfa = %{dfa | mode: :stateless}
+        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
+
+        Nx.Serving.run(serving, prompt)
+
+        {max_new_tokens, serving}
+      end
+    },
+    ## stateful constrained sampling
+    "Stateful Constrained Sampling, EMLX" => {
+      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
+      before_scenario: fn max_new_tokens ->
+        backend = EMLX.Backend
+        compiler = Nx.Defn.Evaluator
+        max_new_tokens = max_new_tokens
+        dfa = %{dfa | mode: :stateful}
+        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
+
+        Nx.Serving.run(serving, prompt)
+
+        {max_new_tokens, serving}
+      end
+    },
+    "Stateful Constrained Sampling, EXLA with Evaluator" => {
+      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
+      before_scenario: fn max_new_tokens ->
+        backend = EXLA.Backend
+        compiler = Nx.Defn.Evaluator
+        max_new_tokens = max_new_tokens
+        dfa = %{dfa | mode: :stateful}
+        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
+
+        Nx.Serving.run(serving, prompt)
+
+        {max_new_tokens, serving}
+      end
+    },
+    "Stateful Constrained Sampling, EXLA with Compiler" => {
+      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
+      before_scenario: fn max_new_tokens ->
+        backend = EXLA.Backend
+        compiler = EXLA
+        max_new_tokens = max_new_tokens
+        dfa = %{dfa | mode: :stateful}
+        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
+
+        Nx.Serving.run(serving, prompt)
+
+        {max_new_tokens, serving}
+      end
+    }
+  },
+  # save: [path: "save.benchee", tag: "first-try"],
+  # formatters: [{Benchee.Formatters.Console, comparison: true, extended_statistics: false}],
+  time: 60,
+  inputs: %{
+    "max_new_tokens: 8" => 8,
+    "max_new_tokens: 64" => 64
+  }
+)
