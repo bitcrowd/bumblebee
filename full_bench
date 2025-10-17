@@ -1,0 +1,83 @@
+Operating System: macOS
+CPU Information: Apple M2 Max
+Number of Available Cores: 12
+Available memory: 96 GB
+Elixir 1.18.3
+Erlang 27.3
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 1 min
+memory time: 0 ns
+reduction time: 0 ns
+parallel: 1
+inputs: max_new_tokens: 64, max_new_tokens: 8
+Estimated total run time: 18 min 36 s
+
+Benchmarking Regular Sampling, EMLX with input max_new_tokens: 64 ...
+Benchmarking Regular Sampling, EMLX with input max_new_tokens: 8 ...
+Benchmarking Regular Sampling, EXLA with Compiler with input max_new_tokens: 64 ...
+Benchmarking Regular Sampling, EXLA with Compiler with input max_new_tokens: 8 ...
+Benchmarking Regular Sampling, EXLA with Evaluator with input max_new_tokens: 64 ...
+Benchmarking Regular Sampling, EXLA with Evaluator with input max_new_tokens: 8 ...
+Benchmarking Stateful Constrained Sampling, EMLX with input max_new_tokens: 64 ...
+Benchmarking Stateful Constrained Sampling, EMLX with input max_new_tokens: 8 ...
+Benchmarking Stateful Constrained Sampling, EXLA with Compiler with input max_new_tokens: 64 ...
+Benchmarking Stateful Constrained Sampling, EXLA with Compiler with input max_new_tokens: 8 ...
+Benchmarking Stateful Constrained Sampling, EXLA with Evaluator with input max_new_tokens: 64 ...
+Benchmarking Stateful Constrained Sampling, EXLA with Evaluator with input max_new_tokens: 8 ...
+Benchmarking Stateless Constrained Sampling, EMLX with input max_new_tokens: 64 ...
+Benchmarking Stateless Constrained Sampling, EMLX with input max_new_tokens: 8 ...
+Benchmarking Stateless Constrained Sampling, EXLA with Compiler with input max_new_tokens: 64 ...
+Benchmarking Stateless Constrained Sampling, EXLA with Compiler with input max_new_tokens: 8 ...
+Benchmarking Stateless Constrained Sampling, EXLA with Evaluator with input max_new_tokens: 64 ...
+Benchmarking Stateless Constrained Sampling, EXLA with Evaluator with input max_new_tokens: 8 ...
+Calculating statistics...
+Formatting results...
+
+##### With input max_new_tokens: 64 #####
+Name                                                          ips        average  deviation         median         99th %
+Regular Sampling, EXLA with Compiler                         0.39         2.55 s     ±0.84%         2.55 s         2.61 s
+Stateful Constrained Sampling, EXLA with Compiler            0.34         2.97 s     ±0.50%         2.97 s         3.01 s
+Stateless Constrained Sampling, EXLA with Compiler           0.33         3.05 s     ±1.13%         3.05 s         3.12 s
+Regular Sampling, EMLX                                       0.26         3.82 s     ±1.39%         3.80 s         3.97 s
+Regular Sampling, EXLA with Evaluator                      0.0651        15.36 s     ±0.26%        15.36 s        15.40 s
+Stateful Constrained Sampling, EMLX                        0.0175        57.07 s     ±0.26%        57.07 s        57.17 s
+Stateless Constrained Sampling, EMLX                       0.0161        62.10 s     ±5.54%        62.10 s        64.53 s
+Stateless Constrained Sampling, EXLA with Evaluator       0.00195       512.18 s     ±0.00%       512.18 s       512.18 s
+Stateful Constrained Sampling, EXLA with Evaluator        0.00191       524.26 s     ±0.00%       524.26 s       524.26 s
+
+Comparison: 
+Regular Sampling, EXLA with Compiler                         0.39
+Stateful Constrained Sampling, EXLA with Compiler            0.34 - 1.17x slower +0.42 s
+Stateless Constrained Sampling, EXLA with Compiler           0.33 - 1.19x slower +0.50 s
+Regular Sampling, EMLX                                       0.26 - 1.50x slower +1.27 s
+Regular Sampling, EXLA with Evaluator                      0.0651 - 6.02x slower +12.81 s
+Stateful Constrained Sampling, EMLX                        0.0175 - 22.38x slower +54.52 s
+Stateless Constrained Sampling, EMLX                       0.0161 - 24.35x slower +59.55 s
+Stateless Constrained Sampling, EXLA with Evaluator       0.00195 - 200.84x slower +509.63 s
+Stateful Constrained Sampling, EXLA with Evaluator        0.00191 - 205.57x slower +521.71 s
+
+##### With input max_new_tokens: 8 #####
+Name                                                          ips        average  deviation         median         99th %
+Regular Sampling, EXLA with Compiler                         1.65      606.45 ms     ±2.92%      607.87 ms      647.76 ms
+Stateful Constrained Sampling, EXLA with Compiler            1.45      688.57 ms     ±3.22%      686.92 ms      779.55 ms
+Stateless Constrained Sampling, EXLA with Compiler           1.41      707.04 ms     ±3.17%      705.90 ms      784.08 ms
+Regular Sampling, EMLX                                       1.22      822.46 ms     ±1.91%      818.97 ms      885.29 ms
+Regular Sampling, EXLA with Evaluator                        0.33     3039.25 ms     ±0.97%     3037.99 ms     3083.03 ms
+Stateful Constrained Sampling, EMLX                         0.117     8571.16 ms     ±4.66%     8485.44 ms     9428.34 ms
+Stateless Constrained Sampling, EMLX                        0.103     9730.53 ms     ±2.25%     9822.82 ms     9999.25 ms
+Stateless Constrained Sampling, EXLA with Evaluator        0.0148    67775.81 ms     ±0.00%    67775.81 ms    67775.81 ms
+Stateful Constrained Sampling, EXLA with Evaluator         0.0147    68181.27 ms     ±0.00%    68181.27 ms    68181.27 ms
+
+Comparison: 
+Regular Sampling, EXLA with Compiler                         1.65
+Stateful Constrained Sampling, EXLA with Compiler            1.45 - 1.14x slower +82.13 ms
+Stateless Constrained Sampling, EXLA with Compiler           1.41 - 1.17x slower +100.60 ms
+Regular Sampling, EMLX                                       1.22 - 1.36x slower +216.02 ms
+Regular Sampling, EXLA with Evaluator                        0.33 - 5.01x slower +2432.81 ms
+Stateful Constrained Sampling, EMLX                         0.117 - 14.13x slower +7964.72 ms
+Stateless Constrained Sampling, EMLX                        0.103 - 16.05x slower +9124.08 ms
+Stateless Constrained Sampling, EXLA with Evaluator        0.0148 - 111.76x slower +67169.36 ms
+Stateful Constrained Sampling, EXLA with Evaluator         0.0147 - 112.43x slower +67574.82 ms
