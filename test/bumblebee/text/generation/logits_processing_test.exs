@@ -5,6 +5,77 @@ defmodule Bumblebee.Text.Generation.LogitsProcessingTest do
 
   alias Bumblebee.Text.Generation.LogitsProcessing
 
+  describe "dfa_processor/3" do
+    test "constrained sampling with DFA" do
+      # the list of all allowed transitions
+      transitions = [
+        # {state, token_id, next_state}
+        {0, 1, 1},
+        {1, 2, 2},
+        {2, 1, 1}
+      ]
+
+      initial_state = 0
+
+      logits = Nx.tensor([0.0, 1.0, 2.0, 3.0])
+
+      start_sequence = [1, 0, 0, 0]
+      context = context(start_sequence)
+
+      # according to our transitions
+      # the only allowed sequences are:
+      # (state: 0) -> (token_id: 1) -> (state: 1)
+      # (state: 1) -> (token_id: 2) -> (state: 2)
+      # (state: 2) -> (token_id: 1) -> (state: 1)
+      # (state: 1) -> (token_id: 2) -> (state: 2)
+      # ...
+
+      dfa = %{state_transitions: transitions, initial_state: initial_state}
+
+      # (state: 0) -> (token_id: 1) -> (state: 1)
+      {processed_logits, context} = LogitsProcessing.dfa_processor(logits, context, dfa: dfa)
+      processed_logits = Nx.devectorize(processed_logits, keep_names: false) |> Nx.squeeze()
+
+      # in this transition only token_id 1 was allowed
+      expected_logits = Nx.tensor([:neg_infinity, 1.0, :neg_infinity, :neg_infinity])
+
+      assert_equal(processed_logits, expected_logits)
+
+      expected_last_state = Nx.tensor([0]) |> Nx.vectorize(:batch)
+      assert_equal(context.logits_processor_state.dfa, expected_last_state)
+
+      new_sequence = Nx.tensor([1, 1, 0, 0])
+      context = %{context | length: context.length + 1, sequence: new_sequence}
+
+      # (state: 1) -> (token_id: 2) -> (state: 2)
+      {processed_logits, context} = LogitsProcessing.dfa_processor(logits, context, dfa: dfa)
+      processed_logits = Nx.devectorize(processed_logits, keep_names: false) |> Nx.squeeze()
+
+      # in this transition only token_id 2 was allowed
+      expected_logits = Nx.tensor([:neg_infinity, :neg_infinity, 2.0, :neg_infinity])
+
+      assert_equal(processed_logits, expected_logits)
+
+      expected_last_state = Nx.tensor([1]) |> Nx.vectorize(:batch)
+      assert_equal(context.logits_processor_state.dfa, expected_last_state)
+
+      new_sequence = Nx.tensor([1, 1, 2, 0])
+      context = %{context | length: context.length + 1, sequence: new_sequence}
+
+      # (state: 2) -> (token_id: 1) -> (state: 1)
+      {processed_logits, context} = LogitsProcessing.dfa_processor(logits, context, dfa: dfa)
+      processed_logits = Nx.devectorize(processed_logits, keep_names: false) |> Nx.squeeze()
+
+      # in this transition only token_id 1 was allowed
+      expected_logits = Nx.tensor([:neg_infinity, 1.0, :neg_infinity, :neg_infinity])
+
+      assert_equal(processed_logits, expected_logits)
+
+      expected_last_state = Nx.tensor([2]) |> Nx.vectorize(:batch)
+      assert_equal(context.logits_processor_state.dfa, expected_last_state)
+    end
+  end
+
   describe "stateful logits processors" do
     defmodule StatefulLogitsProcessing do
       import Nx.Defn
@@ -13,7 +84,7 @@ defmodule Bumblebee.Text.Generation.LogitsProcessingTest do
         initial_suppressed_index = Nx.tensor([opts[:initial_suppressed_index]])
 
         suppressed_index =
-          context.logits_processor_states[:next_suppressed_index] || initial_suppressed_index
+          context.logits_processor_state[:next_suppressed_index] || initial_suppressed_index
 
         values =
           Nx.broadcast(Nx.Constants.neg_infinity(Nx.type(logits)), Nx.size(suppressed_index))
@@ -430,7 +501,7 @@ defmodule Bumblebee.Text.Generation.LogitsProcessingTest do
       sequence: Nx.tensor(sequence),
       length: Enum.count(sequence, &(&1 != 0)),
       input_length: 1,
-      logits_processor_states: %{}
+      logits_processor_state: %{}
     }
   end
 end
