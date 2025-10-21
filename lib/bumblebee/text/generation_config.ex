@@ -93,6 +93,10 @@ defmodule Bumblebee.Text.GenerationConfig do
       default: [],
       doc: "a list of token ids to suppress during generation"
     ],
+    dfa: [
+      default: nil,
+      doc: "the definition of a deterministic finite automaton (DFA) for constrained generation"
+    ],
     no_repeat_ngram_length: [
       default: nil,
       doc: "when set, n-grams of the given length can occur only once in the generated sequence"
