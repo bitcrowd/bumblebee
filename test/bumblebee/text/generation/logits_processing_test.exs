@@ -5,6 +5,162 @@ defmodule Bumblebee.Text.Generation.LogitsProcessingTest do
 
   alias Bumblebee.Text.Generation.LogitsProcessing
 
+  defmodule DefnCheck do
+    import Nx.Defn
+
+    defn check(logits, context, dfa) do
+      LogitsProcessing.dfa_processor(logits, context, dfa: dfa)
+    end
+  end
+
+  describe "defn check" do
+    @tag timeout: :infinity
+    test "states = 1000, tokens = 3" do
+      states = 1000
+      tokens = 3
+
+      transitions =
+        for state <- 0..(states - 1) do #, next_state <- 0..(states - 1) #, token <- 0..(tokens - 1) do
+          {state, Integer.mod(state + 1, 3) + 1, state + 1}
+        end
+
+
+      initial_state = 0
+
+      dfa = %{state_transitions: transitions, initial_state: initial_state}
+
+      sequence = [1, 0, 0, 0]
+
+
+      context = context(sequence)
+      logits = Nx.tensor([0.0, 1.0, 2.0, 3.0])
+
+      expr =
+        fn logits, context ->
+          for _i <- 1..4, reduce: {logits, context} do
+            {l, c} -> DefnCheck.check(l, c, dfa)
+          end
+        end
+
+      defn_expr = Nx.Defn.debug_expr(&expr.(&1, &2)).(logits, context)
+
+      {_logits, state} = defn_expr
+
+      # IO.puts(simplify_expr(state.logits_processor_state.dfa), limit: :infinity, structs: false)
+      count = count(state.logits_processor_state.dfa, 0)
+
+      IO.puts("states: #{states}")
+      IO.puts("tokens: #{tokens}")
+      IO.puts("state transitions: #{Enum.count(transitions)}")
+      IO.puts("defn count: #{count}")
+
+      IO.puts("defn count / states: #{count / states}")
+      IO.puts("defn count / transitions: #{count / Enum.count(transitions)}")
+
+      IO.puts("--------------------------------")
+    end
+
+    @tag timeout: :infinity
+    test "states = 2000, tokens = 3" do
+      states = 2000
+      tokens = 3
+
+      transitions =
+        for state <- 0..(states - 1) do #, next_state <- 0..(states - 1) #, token <- 0..(tokens - 1) do
+          {state, Integer.mod(state + 1, 3) + 1, state + 1}
+        end
+
+
+      initial_state = 0
+
+      dfa = %{state_transitions: transitions, initial_state: initial_state}
+
+      sequence = [1, 0, 0, 0]
+
+      context = context(sequence)
+      logits = Nx.tensor([0.0, 1.0, 2.0, 3.0])
+
+      expr =
+        fn logits, context ->
+          for _i <- 1..4, reduce: {logits, context} do
+            {l, c} -> DefnCheck.check(l, c, dfa)
+          end
+        end
+
+      defn_expr = Nx.Defn.debug_expr(&expr.(&1, &2)).(logits, context)
+
+      {_logits, state} = defn_expr
+
+      # IO.puts(simplify_expr(state.logits_processor_state.dfa), limit: :infinity, structs: false)
+      count = count(state.logits_processor_state.dfa, 0)
+
+      IO.puts("states: #{states}")
+      IO.puts("tokens: #{tokens}")
+      IO.puts("state transitions: #{Enum.count(transitions)}")
+      IO.puts("defn count: #{count}")
+      IO.puts("defn count / states: #{count / states}")
+      IO.puts("defn count / transitions: #{count / Enum.count(transitions)}")
+
+      IO.puts("---------------------------------")
+    end
+  end
+
+  defp count(list, acc) when is_list(list) do
+    count(0, acc + 1 + Enum.sum_by(list, &count(&1, 0)))
+  end
+
+  defp count(tuple, acc) when is_tuple(tuple) do
+    list = Tuple.to_list(tuple)
+    count(list, acc)
+  end
+
+  defp count(%{__struct__: Nx.Tensor, data: data}, acc) do
+    count(data, acc + 1)
+  end
+
+  defp count(%{__struct__: Nx.Defn.Expr, args: args, op: _op}, acc) do
+    count(0, acc + 1 + Enum.sum_by(args, &count(&1, 0)))
+  end
+
+  defp count(%{__struct__: Nx.Defn.Expr, data: data, op: _op}, acc) do
+    count(0, acc + 1 + Enum.sum_by(data, &count(&1, 0)))
+  end
+
+  defp count(%{__struct__: Nx.Defn.Expr, op: _op}, _acc) do
+    1
+  end
+
+  defp count(num, acc) when is_number(num), do: num + acc
+
+  defp count(_expr, acc), do: acc + 1
+
+  # defp simplify_expr(list) when is_list(list) do
+  #   Enum.map(list, &simplify_expr(&1))
+  # end
+
+  # defp simplify_expr(tuple) when is_tuple(tuple) do
+  #   list = Tuple.to_list(tuple)
+  #   simplify_expr(list)
+  # end
+
+  # defp simplify_expr(%{__struct__: Nx.Tensor, data: data}) do
+  #   %{__struct__: Nx.Tensor, data: simplify_expr(data)}
+  # end
+
+  # defp simplify_expr(%{__struct__: Nx.Defn.Expr, args: args, op: op}) do
+  #   %{__struct__: Nx.Defn.Expr, op: op, args: Enum.map(args, &simplify_expr(&1))}
+  # end
+
+  # defp simplify_expr(%{__struct__: Nx.Defn.Expr, data: data, op: op}) do
+  #   %{__struct__: Nx.Defn.Expr, op: op, data: simplify_expr(data)}
+  # end
+
+  # defp simplify_expr(%{__struct__: Nx.Defn.Expr, op: op}) do
+  #   %{__struct__: Nx.Defn.Expr, op: op}
+  # end
+
+  # defp simplify_expr(expr), do: expr
+
   describe "dfa_processor/3" do
     test "constrained sampling with DFA" do
       # the list of all allowed transitions
@@ -496,7 +652,7 @@ defmodule Bumblebee.Text.Generation.LogitsProcessingTest do
     end
   end
 
-  defp context(sequence) do
+  def context(sequence) do
     %{
       sequence: Nx.tensor(sequence),
       length: Enum.count(sequence, &(&1 != 0)),

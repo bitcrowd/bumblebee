@@ -27,13 +27,12 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
     initial_state = Nx.tensor([dfa.initial_state]) |> Nx.vectorize(:batch)
 
     current_state =
-      if context.length == context.input_length do
-        initial_state
-      else
-        last_state = context.logits_processor_state.dfa
+      if last_state = context.logits_processor_state[:dfa] do
         last_token_id = context.sequence[Nx.subtract(context.length, 1)]
 
         state_transitions_tensor[[last_state, last_token_id]] |> Nx.squeeze()
+      else
+        initial_state
       end
 
     suppressed_logits = Nx.fill(logits, Nx.Constants.neg_infinity(), type: Nx.type(logits))

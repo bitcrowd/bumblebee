@@ -1,0 +1,9 @@
+To run multi-device tests: XLA_FLAGS=--xla_force_host_platform_device_count=2 mix test
+To run tests without hitting the network: BUMBLEBEE_OFFLINE=true mix test
+Running ExUnit with seed: 590531, max_cases: 24
+Excluding tags: [:test]
+Including tags: [location: {"test/bumblebee/text/generation/logits_processing_test.exs", 29}]
+
+
+BREAK: (a)bort (A)bort with dump (c)ontinue (p)roc info (i)nfo
+       (l)oaded (v)ersion (k)ill (D)b-tables (d)istribution

@@ -107,6 +107,50 @@ defmodule Bumblebee.Text.GenerationTest do
     assert_equal(token_ids, Nx.tensor([[80, 1023, 1023]]))
   end
 
+  test "dfa compilation" do
+    transitions = [
+      # {state, token_id, next_state}
+      {0, 1, 1},
+      {1, 2, 2},
+      {2, 1, 1}
+    ]
+
+    initial_state = 0
+
+    dfa = %{state_transitions: transitions, initial_state: initial_state}
+
+    assert {:ok, %{model: model, params: params, spec: spec}} =
+             Bumblebee.load_model({:hf, "hf-internal-testing/tiny-random-GPT2LMHeadModel"})
+
+    {:ok, generation_config} =
+      Bumblebee.load_generation_config({:hf, "hf-internal-testing/tiny-random-GPT2LMHeadModel"})
+
+    assert %Bumblebee.Text.Gpt2{architecture: :for_causal_language_modeling} = spec
+
+    input_ids = Nx.tensor([[0, 0, 10, 20, 30, 40, 50, 60, 70, 80]])
+    attention_mask = Nx.tensor([[0, 0, 1, 1, 1, 1, 1, 1, 1, 1]])
+    seed = Nx.tensor([0])
+
+    inputs = %{
+      "input_ids" => input_ids,
+      "attention_mask" => attention_mask,
+      "seed" => seed
+    }
+
+    generation_config = Bumblebee.configure(generation_config, max_new_tokens: 3)
+
+    generate =
+      Bumblebee.Text.Generation.build_generate(model, spec, generation_config,
+        logits_processors: [
+          &Bumblebee.Text.Generation.LogitsProcessing.dfa_processor(&1, &2, dfa: dfa)
+        ]
+      )
+
+    dbg(Nx.Defn.debug_expr(generate).(params, inputs))
+
+    # %{token_ids: token_ids} = generate.(params, inputs)
+  end
+
   test "with stateful logits processor" do
     assert {:ok, %{model: model, params: params, spec: spec}} =
              Bumblebee.load_model({:hf, "hf-internal-testing/tiny-random-GPT2LMHeadModel"})

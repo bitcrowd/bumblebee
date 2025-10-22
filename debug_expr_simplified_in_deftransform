@@ -1,0 +1,65 @@
+simplify_expr(state.logits_processor_state.dfa) #=> %{
+  data: %{
+    args: [
+      %{
+        data: %{
+          args: [
+            %{
+              data: %{
+                args: [
+                  %{
+                    data: %{
+                      args: [
+                        %{
+                          data: %{args: [%{...}, ...], op: :indexed_put, ...},
+                          __struct__: Nx.Tensor
+                        },
+                        %{data: %{args: [...], ...}, __struct__: Nx.Tensor},
+                        %{data: %{...}, ...},
+                        [...]
+                      ],
+                      op: :indexed_put,
+                      __struct__: Nx.Defn.Expr
+                    },
+                    __struct__: Nx.Tensor
+                  }
+                ],
+                op: :reshape,
+                __struct__: Nx.Defn.Expr
+              },
+              __struct__: Nx.Tensor
+            },
+            %{
+              data: %{
+                args: [
+                  [
+                    %{
+                      data: %{args: [0], op: :iota, __struct__: Nx.Defn.Expr},
+                      __struct__: Nx.Tensor
+                    },
+                    %{
+                      data: %{args: [[...], ...], op: :stack, ...},
+                      __struct__: Nx.Tensor
+                    }
+                  ],
+                  3
+                ],
+                op: :concatenate,
+                __struct__: Nx.Defn.Expr
+              },
+              __struct__: Nx.Tensor
+            },
+            [[:axes, [0, 1, 2]]]
+          ],
+          op: :gather,
+          __struct__: Nx.Defn.Expr
+        },
+        __struct__: Nx.Tensor
+      },
+      [1, 2]
+    ],
+    op: :squeeze,
+    __struct__: Nx.Defn.Expr
+  },
+  __struct__: Nx.Tensor
+}

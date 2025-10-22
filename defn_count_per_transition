@@ -1,0 +1,56 @@
+in defn:
+668791556
+
+in deftransform:
+668791335
+
+[test/bumblebee/text/generation/logits_processing_test.exs:25: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"states: #{states}" #=> "states: 3"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:26: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"tokens: #{tokens}" #=> "tokens: 3"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:27: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"state transitions: #{Enum.count(transitions)}" #=> "state transitions: 27"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:73: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"defn count: #{count}" #=> "defn count: 9559"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:75: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"defn count / transitions: #{count / Enum.count(transitions)}" #=> "defn count / transitions: 354.037037037037"
+
+------------------------------------
+
+[test/bumblebee/text/generation/logits_processing_test.exs:25: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"states: #{states}" #=> "states: 3"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:26: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"tokens: #{tokens}" #=> "tokens: 4000"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:27: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"state transitions: #{Enum.count(transitions)}" #=> "state transitions: 36000"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:73: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"defn count: #{count}" #=> "defn count: 8427241"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:75: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"defn count / transitions: #{count / Enum.count(transitions)}" #=> "defn count / transitions: 234.09002777777778"
+
+-----------------------------------
+
+[test/bumblebee/text/generation/logits_processing_test.exs:25: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"states: #{states}" #=> "states: 1000"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:26: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"tokens: #{tokens}" #=> "tokens: 3"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:27: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"state transitions: #{Enum.count(transitions)}" #=> "state transitions: 3000000"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:73: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"defn count: #{count}" #=> "defn count: 20143529163"
+
+[test/bumblebee/text/generation/logits_processing_test.exs:75: Bumblebee.Text.Generation.LogitsProcessingTest."test defn check"/1]
+"defn count / transitions: #{count / Enum.count(transitions)}" #=> "defn count / transitions: 6714.509721"
+
+.
