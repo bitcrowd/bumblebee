@@ -3,49 +3,6 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
 
   import Nx.Defn
 
-  deftransform dfa_processor(logits, context, opts \\ []) do
-    opts = Keyword.validate!(opts, [:dfa])
-    dfa = opts[:dfa]
-
-    num_states =
-      dfa.state_transitions
-      |> Enum.flat_map(fn {state, _token_id, next_state} -> [state, next_state] end)
-      |> Enum.uniq()
-      |> Enum.count()
-
-    empty_state_transitions_tensor = Nx.broadcast(0, {num_states, Nx.size(logits)})
-
-    state_transitions_tensor =
-      for transition <- dfa.state_transitions, reduce: empty_state_transitions_tensor do
-        transitions_tensor ->
-          {current_state, token_id, next_state} = transition
-          index = Nx.tensor([current_state, token_id])
-
-          Nx.indexed_put(transitions_tensor, index, next_state)
-      end
-
-    initial_state = Nx.tensor([dfa.initial_state]) |> Nx.vectorize(:batch)
-
-    current_state =
-      if context.length == context.input_length do
-        initial_state
-      else
-        last_state = context.logits_processor_state.dfa
-        last_token_id = context.sequence[Nx.subtract(context.length, 1)]
-
-        state_transitions_tensor[[last_state, last_token_id]] |> Nx.squeeze()
-      end
-
-    suppressed_logits = Nx.fill(logits, Nx.Constants.neg_infinity(), type: Nx.type(logits))
-    allowed_token_ids = state_transitions_tensor[current_state]
-
-    logits = Nx.select(allowed_token_ids, logits, suppressed_logits)
-
-    context = put_in(context, [:logits_processor_state, :dfa], current_state)
-
-    {logits, context}
-  end
-
   deftransform suppressed_tokens_processor(logits, _context, opts \\ []) do
     opts = Keyword.validate!(opts, [:suppressed_token_ids])
 
