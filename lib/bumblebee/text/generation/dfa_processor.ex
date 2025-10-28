@@ -38,7 +38,9 @@ defmodule Bumblebee.Text.Generation.DFAProcessor do
       |> Enum.uniq()
       |> Enum.count()
 
-    empty_state_transitions_tensor = Nx.broadcast(0, {num_states, dfa.vocab_size})
+    # we add 1 to num_states as we want to have an empty row for state 0
+    # 0 should represent "no transition" as this is the only false value in nx
+    empty_state_transitions_tensor = Nx.broadcast(0, {num_states + 1, dfa.vocab_size})
 
     state_transitions_tensor =
       for transition <- dfa.state_transitions, reduce: empty_state_transitions_tensor do
