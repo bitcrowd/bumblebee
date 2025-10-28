@@ -132,11 +132,11 @@ defmodule Bumblebee.Text.GenerationTest do
       Bumblebee.Text.Generation.build_generate(model, spec, generation_config,
         logits_processors: [
           Bumblebee.configure(Bumblebee.Text.Generation.DFAProcessor,
-            initial_state: [0, 1],
+            initial_state: [1, 2],
             state_transitions: [
-              {0, 1, 1},
               {1, 2, 2},
-              {2, 1, 1}
+              {2, 3, 3},
+              {3, 2, 2}
             ],
             vocab_size: spec.vocab_size
           )
@@ -146,27 +146,27 @@ defmodule Bumblebee.Text.GenerationTest do
     %{token_ids: token_ids} = generate.(params, inputs)
 
     # according to DFA definition
-    # first batch entry starts in state 0
-
-    # first token_id should be 1 
-    assert_equal(token_ids[[0, 0]], 1)
-
-    # second token_id should be 2 
-    assert_equal(token_ids[[0, 1]], 2)
-
-    # third token_id should be 1 
-    assert_equal(token_ids[[0, 2]], 1)
-
-    # second batch entry starts in state 1
+    # first batch entry starts in state 1
 
     # first token_id should be 2 
-    assert_equal(token_ids[[1, 0]], 2)
+    assert_equal(token_ids[[0, 0]], 2)
 
-    # second token_id should be 1 
-    assert_equal(token_ids[[1, 1]], 1)
+    # second token_id should be 3 
+    assert_equal(token_ids[[0, 1]], 3)
 
     # third token_id should be 2 
-    assert_equal(token_ids[[1, 2]], 2)
+    assert_equal(token_ids[[0, 2]], 2)
+
+    # second batch entry starts in state 2
+
+    # first token_id should be 3 
+    assert_equal(token_ids[[1, 0]], 3)
+
+    # second token_id should be 2 
+    assert_equal(token_ids[[1, 1]], 2)
+
+    # third token_id should be 3 
+    assert_equal(token_ids[[1, 2]], 3)
   end
 
   test "with stateful logits processor with different batch sizes" do
