@@ -106,7 +106,7 @@ state_transitions =
     end
   end)
 
-dfa = %{state_transitions: state_transitions, mode: :stateful, initial_state: 0}
+dfa = %{state_transitions: state_transitions, initial_state: 0, vocab_size: model_info.spec.vocab_size}
 
 build_serving = fn backend, compiler, max_new_tokens, dfa ->
   Nx.global_default_backend(backend)
@@ -177,14 +177,14 @@ Benchee.run(
         {max_new_tokens, serving}
       end
     },
-    ## stateless constrained sampling
-    "Stateless Constrained Sampling, EMLX" => {
+    ##  constrained sampling
+    "Constrained Sampling, EMLX" => {
       fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
       before_scenario: fn max_new_tokens ->
         backend = EMLX.Backend
         compiler = Nx.Defn.Evaluator
         max_new_tokens = max_new_tokens
-        dfa = %{dfa | mode: :stateless}
+        dfa = dfa
         serving = build_serving.(backend, compiler, max_new_tokens, dfa)
 
         Nx.Serving.run(serving, prompt)
@@ -192,13 +192,13 @@ Benchee.run(
         {max_new_tokens, serving}
       end
     },
-    "Stateless Constrained Sampling, EXLA with Evaluator" => {
+    "Constrained Sampling, EXLA with Evaluator" => {
       fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
       before_scenario: fn max_new_tokens ->
         backend = EXLA.Backend
         compiler = Nx.Defn.Evaluator
         max_new_tokens = max_new_tokens
-        dfa = %{dfa | mode: :stateless}
+        dfa = dfa
         serving = build_serving.(backend, compiler, max_new_tokens, dfa)
 
         Nx.Serving.run(serving, prompt)
@@ -206,56 +206,13 @@ Benchee.run(
         {max_new_tokens, serving}
       end
     },
-    "Stateless Constrained Sampling, EXLA with Compiler" => {
+    "Constrained Sampling, EXLA with Compiler" => {
       fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
       before_scenario: fn max_new_tokens ->
         backend = EXLA.Backend
         compiler = EXLA
         max_new_tokens = max_new_tokens
-        dfa = %{dfa | mode: :stateless}
-        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
-
-        Nx.Serving.run(serving, prompt)
-
-        {max_new_tokens, serving}
-      end
-    },
-    ## stateful constrained sampling
-    "Stateful Constrained Sampling, EMLX" => {
-      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
-      before_scenario: fn max_new_tokens ->
-        backend = EMLX.Backend
-        compiler = Nx.Defn.Evaluator
-        max_new_tokens = max_new_tokens
-        dfa = %{dfa | mode: :stateful}
-        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
-
-        Nx.Serving.run(serving, prompt)
-
-        {max_new_tokens, serving}
-      end
-    },
-    "Stateful Constrained Sampling, EXLA with Evaluator" => {
-      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
-      before_scenario: fn max_new_tokens ->
-        backend = EXLA.Backend
-        compiler = Nx.Defn.Evaluator
-        max_new_tokens = max_new_tokens
-        dfa = %{dfa | mode: :stateful}
-        serving = build_serving.(backend, compiler, max_new_tokens, dfa)
-
-        Nx.Serving.run(serving, prompt)
-
-        {max_new_tokens, serving}
-      end
-    },
-    "Stateful Constrained Sampling, EXLA with Compiler" => {
-      fn {_max_new_tokens, serving} -> Nx.Serving.run(serving, prompt) end,
-      before_scenario: fn max_new_tokens ->
-        backend = EXLA.Backend
-        compiler = EXLA
-        max_new_tokens = max_new_tokens
-        dfa = %{dfa | mode: :stateful}
+        dfa = dfa
         serving = build_serving.(backend, compiler, max_new_tokens, dfa)
 
         Nx.Serving.run(serving, prompt)
