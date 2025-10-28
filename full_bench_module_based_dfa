@@ -1,0 +1,66 @@
+Operating System: macOS
+CPU Information: Apple M2 Max
+Number of Available Cores: 12
+Available memory: 96 GB
+Elixir 1.19.1
+Erlang 28.1.1
+JIT enabled: true
+
+Benchmark suite executing with the following configuration:
+warmup: 2 s
+time: 1 min
+memory time: 0 ns
+reduction time: 0 ns
+parallel: 1
+inputs: max_new_tokens: 64, max_new_tokens: 8
+Estimated total run time: 12 min 24 s
+Excluding outliers: false
+
+Benchmarking Constrained Sampling, EMLX with input max_new_tokens: 64 ...
+Benchmarking Constrained Sampling, EMLX with input max_new_tokens: 8 ...
+Benchmarking Constrained Sampling, EXLA with Compiler with input max_new_tokens: 64 ...
+Benchmarking Constrained Sampling, EXLA with Compiler with input max_new_tokens: 8 ...
+Benchmarking Constrained Sampling, EXLA with Evaluator with input max_new_tokens: 64 ...
+Benchmarking Constrained Sampling, EXLA with Evaluator with input max_new_tokens: 8 ...
+Benchmarking Regular Sampling, EMLX with input max_new_tokens: 64 ...
+Benchmarking Regular Sampling, EMLX with input max_new_tokens: 8 ...
+Benchmarking Regular Sampling, EXLA with Compiler with input max_new_tokens: 64 ...
+Benchmarking Regular Sampling, EXLA with Compiler with input max_new_tokens: 8 ...
+Benchmarking Regular Sampling, EXLA with Evaluator with input max_new_tokens: 64 ...
+Benchmarking Regular Sampling, EXLA with Evaluator with input max_new_tokens: 8 ...
+Calculating statistics...
+Formatting results...
+
+##### With input max_new_tokens: 64 #####
+Name                                                ips        average  deviation         median         99th %
+Regular Sampling, EXLA with Compiler               0.40         2.49 s     ±0.34%         2.49 s         2.50 s
+Constrained Sampling, EXLA with Compiler           0.35         2.89 s     ±0.43%         2.89 s         2.93 s
+Regular Sampling, EMLX                             0.25         4.01 s     ±0.43%         4.01 s         4.03 s
+Constrained Sampling, EMLX                         0.20         4.88 s     ±1.75%         4.86 s         5.09 s
+Regular Sampling, EXLA with Evaluator            0.0693        14.44 s     ±0.23%        14.42 s        14.48 s
+Constrained Sampling, EXLA with Evaluator        0.0261        38.27 s     ±7.39%        38.27 s        40.27 s
+
+Comparison:
+Regular Sampling, EXLA with Compiler               0.40
+Constrained Sampling, EXLA with Compiler           0.35 - 1.16x slower +0.40 s
+Regular Sampling, EMLX                             0.25 - 1.61x slower +1.52 s
+Constrained Sampling, EMLX                         0.20 - 1.96x slower +2.39 s
+Regular Sampling, EXLA with Evaluator            0.0693 - 5.81x slower +11.95 s
+Constrained Sampling, EXLA with Evaluator        0.0261 - 15.39x slower +35.78 s
+
+##### With input max_new_tokens: 8 #####
+Name                                                ips        average  deviation         median         99th %
+Regular Sampling, EXLA with Compiler               1.65         0.61 s     ±1.37%         0.61 s         0.63 s
+Constrained Sampling, EXLA with Compiler           1.54         0.65 s     ±1.33%         0.65 s         0.67 s
+Regular Sampling, EMLX                             1.20         0.83 s     ±1.15%         0.83 s         0.88 s
+Constrained Sampling, EMLX                         0.50         2.01 s     ±1.59%         2.00 s         2.09 s
+Regular Sampling, EXLA with Evaluator              0.34         2.98 s     ±1.50%         2.97 s         3.11 s
+Constrained Sampling, EXLA with Evaluator        0.0700        14.28 s     ±0.48%        14.30 s        14.35 s
+
+Comparison:
+Regular Sampling, EXLA with Compiler               1.65
+Constrained Sampling, EXLA with Compiler           1.54 - 1.07x slower +0.0441 s
+Regular Sampling, EMLX                             1.20 - 1.38x slower +0.23 s
+Constrained Sampling, EMLX                         0.50 - 3.31x slower +1.40 s
+Regular Sampling, EXLA with Evaluator              0.34 - 4.91x slower +2.37 s
+Constrained Sampling, EXLA with Evaluator        0.0700 - 23.54x slower +13.67 s
