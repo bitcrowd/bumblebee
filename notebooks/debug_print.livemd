@@ -1,0 +1,52 @@
+# Printing top logits and token ids
+
+```elixir
+Mix.install([
+  {:bumblebee, path: "#{Path.absname(__DIR__)}/.."},
+  {:nx, "~> 0.10.0", override: true},
+  {:exla, "~> 0.10.0"},
+  {:emlx, github: "elixir-nx/emlx"}
+])
+
+# backend = {EMLX.Backend, device: :gpu}
+# compiler = EMLX
+backend = {EXLA.Backend, client: :host}
+compiler = EXLA
+
+Nx.global_default_backend(backend)
+```
+
+## Running the serving
+
+```elixir
+repo = {:hf, "HuggingFaceTB/SmolLM2-135M-Instruct"}
+
+sequence_length = 512
+
+max_new_tokens = 4
+
+prompt = """
+Tell me a funny joke please.
+"""
+
+{:ok, model_info} = Bumblebee.load_model(repo, backend: backend)
+
+{:ok, tokenizer} = Bumblebee.load_tokenizer(repo)
+{:ok, generation_config} = Bumblebee.load_generation_config(repo)
+
+generation_config =
+  Bumblebee.configure(generation_config,
+    debug_limit: 10,
+    max_new_tokens: max_new_tokens,
+    strategy: %{type: :greedy_search}
+  )
+
+serving =
+  Bumblebee.Text.generation(model_info, tokenizer, generation_config,
+    compile: [batch_size: 1, sequence_length: sequence_length],
+    stream: false,
+    defn_options: [compiler: compiler]
+  )
+
+Nx.Serving.run(serving, prompt)
+```
