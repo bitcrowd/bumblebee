@@ -1,6 +1,13 @@
 defmodule Bumblebee.Text.GenerationConfig do
   alias Bumblebee.Shared
 
+  debug_options = [
+    debug_limit: [
+      default: 1,
+      doc: "the number of logits and token ids printed (starting from largest logit)"
+    ]
+  ]
+
   length_options = [
     max_new_tokens: [
       default: 20,
@@ -132,7 +139,11 @@ defmodule Bumblebee.Text.GenerationConfig do
   ]
 
   options =
-    length_options ++ strategy_options ++ token_options ++ special_token_options ++ other_options
+    length_options ++
+      strategy_options ++
+      token_options ++
+      special_token_options ++
+      other_options ++ debug_options
 
   @moduledoc """
   A set of configuration options controlling text generation.
