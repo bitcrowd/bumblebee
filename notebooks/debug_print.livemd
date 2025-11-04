@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:bumblebee, path: "#{Path.absname(__DIR__)}/.."},
+  {:bumblebee, "~> 0.6"},
   {:nx, "~> 0.10.0", override: true},
   {:exla, "~> 0.10.0"},
   {:emlx, github: "elixir-nx/emlx"}
@@ -68,7 +68,6 @@ Write me a poem about airships. Don't use the the letter `e`. Reply only with th
 
 generation_config =
   Bumblebee.configure(generation_config,
-    debug_limit: 3,
     max_new_tokens: max_new_tokens,
     strategy: %{type: :multinomial_sampling, top_k: 3 }
   )
@@ -82,6 +81,9 @@ generate_fun =
 ```
 
 ## Setting up the serving
+
+This is taken from `lib/bumblebee/text/text_generation.ex`. It's basically the `Bumblebee.Text.generation` function that you usually use to create text generation servings (with some minor modifications to simplify it).
+We must use the lower level API here to be able to include `PrintLogitsProcessor` in `generate_fun`.
 
 ```elixir
 alias Bumblebee.Shared
