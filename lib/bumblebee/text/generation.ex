@@ -350,6 +350,9 @@ defmodule Bumblebee.Text.Generation do
 
     processors =
       [
+        if config.debug_limit do
+          &debug_processor(&1, &2, debug_limit: config.debug_limit)
+        end,
         if config.no_repeat_ngram_length && config.no_repeat_ngram_length > 0 do
           &no_repeat_ngram_processor(&1, &2, ngram_length: config.no_repeat_ngram_length)
         end,
