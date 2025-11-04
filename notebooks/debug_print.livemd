@@ -22,16 +22,19 @@ Nx.global_default_backend(backend)
 defmodule PrintLogitsProcessor do
   import Nx.Defn
 
-  deftransform debug_processor(logits, _context, opts \\ []) do
+  deftransform debug_processor(logits, context, opts \\ []) do
     k = opts[:debug_limit]
 
-    print_top_k_logits_and_token_ids(logits, k)
+    print_top_k_logits_and_token_ids(logits, k, context.sequence)
   end
 
-  defnp print_top_k_logits_and_token_ids(logits, k) do
+  defnp print_top_k_logits_and_token_ids(logits, k, sequence) do
     token = create_token()
 
     {top_values, top_indices} = Nx.top_k(logits, k: k)
+
+    {token, _sequence} =
+      hook_token(token, sequence, :sequence, &IO.inspect({:sequence, &1}, limit: :infinity))
 
     {token, _top_values} =
       hook_token(token, top_values, :top_values, &IO.inspect({:logits, &1}))
