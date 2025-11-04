@@ -20,6 +20,9 @@ dependencies = ['outlines_core']
 
 ## DFA definition
 
+The following defines our DFA.
+We are using `outlines-core` to produce the state transitions and the initial state.
+
 ```python
 import json
 
@@ -27,10 +30,11 @@ from outlines_core.json_schema import build_regex_from_schema
 from outlines_core import Index, Vocabulary
 
 
-schema =  {
-  "title": "Foo",
-  "type": "object",
-  "properties": {"date": {"type": "string", "format": "date"}}
+schema =  {  
+  "type": "array",
+  "items": {
+    "type": "integer"
+  }
 }
 regex = build_regex_from_schema(json.dumps(schema))
 
@@ -39,141 +43,16 @@ index = Index(regex, vocabulary)
 ```
 
 ```elixir
-IO.puts index
-```
+import Pythonx
 
-The following defines our DFA.
-The state transitions and the initial state were produced using outlines-core, with the following schema input.
+transitions = ~PY"index.get_transitions()" |> Pythonx.decode()
 
-```json
-{
-  "type": "array",
-  "items": {
-    "type": "integer"
-  }
-}
-```
+state_transitions =
+  Enum.flat_map(transitions, fn {state, state_transitions} ->
+    Enum.map(state_transitions, fn {token_id, next_state} -> {state, token_id, next_state} end)
+  end)
 
-```elixir
-state_transitions = [
-  {96, 33, 128},
-  {96, 40, 128},
-  {96, 36, 128},
-  {96, 32, 112},
-  {96, 39, 128},
-  {96, 35, 128},
-  {96, 38, 128},
-  {96, 34, 128},
-  {96, 41, 128},
-  {96, 37, 128},
-  {144, 2, 144},
-  {176, 77, 144},
-  {224, 33, 240},
-  {224, 40, 240},
-  {224, 36, 240},
-  {224, 32, 112},
-  {224, 39, 240},
-  {224, 35, 240},
-  {224, 38, 240},
-  {224, 34, 240},
-  {224, 41, 240},
-  {224, 37, 240},
-  {128, 33, 128},
-  {128, 77, 144},
-  {128, 36, 128},
-  {128, 28, 192},
-  {128, 39, 128},
-  {128, 10790, 224},
-  {128, 34, 128},
-  {128, 37, 128},
-  {128, 40, 128},
-  {128, 32, 128},
-  {128, 216, 176},
-  {128, 35, 128},
-  {128, 38, 128},
-  {128, 41, 128},
-  {128, 6329, 144},
-  {80, 33, 128},
-  {80, 77, 144},
-  {80, 29, 96},
-  {80, 36, 128},
-  {80, 41, 128},
-  {80, 32, 112},
-  {80, 39, 128},
-  {80, 216, 176},
-  {80, 35, 128},
-  {80, 40, 128},
-  {80, 38, 128},
-  {80, 34, 128},
-  {80, 6329, 144},
-  {80, 37, 128},
-  {112, 216, 176},
-  {112, 10790, 224},
-  {112, 77, 144},
-  {112, 6329, 144},
-  {112, 28, 192},
-  {64, 9197, 96},
-  {64, 75, 160},
-  {208, 33, 240},
-  {208, 29, 224},
-  {208, 36, 240},
-  {208, 40, 240},
-  {208, 32, 112},
-  {208, 39, 240},
-  {208, 35, 240},
-  {208, 38, 240},
-  {208, 34, 240},
-  {208, 41, 240},
-  {208, 37, 240},
-  {160, 33, 128},
-  {160, 77, 144},
-  {160, 36, 128},
-  {160, 39, 128},
-  {160, 256, 176},
-  {160, 731, 96},
-  {160, 34, 128},
-  {160, 37, 128},
-  {160, 29, 96},
-  {160, 40, 128},
-  {160, 32, 112},
-  {160, 216, 80},
-  {160, 35, 128},
-  {160, 38, 128},
-  {160, 6329, 144},
-  {160, 41, 128},
-  {240, 33, 240},
-  {240, 77, 144},
-  {240, 36, 240},
-  {240, 28, 192},
-  {240, 39, 240},
-  {240, 10790, 224},
-  {240, 34, 240},
-  {240, 37, 240},
-  {240, 40, 240},
-  {240, 32, 240},
-  {240, 216, 176},
-  {240, 35, 240},
-  {240, 38, 240},
-  {240, 41, 240},
-  {240, 6329, 144},
-  {192, 33, 240},
-  {192, 29, 224},
-  {192, 36, 240},
-  {192, 40, 240},
-  {192, 32, 112},
-  {192, 39, 240},
-  {192, 216, 208},
-  {192, 35, 240},
-  {192, 731, 224},
-  {192, 38, 240},
-  {192, 34, 240},
-  {192, 41, 240},
-  {192, 37, 240}
-]
-```
-
-```elixir
-initial_state = 64
+initial_state = ~PY"index.get_initial_state()" |> Pythonx.decode()
 ```
 
 ## Running serving
