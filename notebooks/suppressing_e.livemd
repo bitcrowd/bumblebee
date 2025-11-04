@@ -32,7 +32,7 @@ In this section we look at running the [SmolLM2](https://huggingface.co/HuggingF
 Let's load the model and create a serving for text generation:
 
 ```elixir
-repo = {:hf, "HuggingFaceTB/SmolLM2-135M-Instruct"}
+repo = {:hf, "HuggingFaceTB/SmolLM2-1.7B-Instruct"}
 
 {:ok, model_info} = Bumblebee.load_model(repo, type: :bf16, backend: backend)
 {:ok, tokenizer} = Bumblebee.load_tokenizer(repo)
@@ -44,11 +44,11 @@ repo = {:hf, "HuggingFaceTB/SmolLM2-135M-Instruct"}
 ```elixir
 generation_config =
   Bumblebee.configure(generation_config,
-    max_new_tokens: 256,
+    max_new_tokens: 60,
     # note that multinomial sampling might still pick one of the suppressed tokens
     # depending on top_p or top_k
-    strategy: %{type: :greedy_search}
-    # strategy: %{type: :multinomial_sampling, top_k: 10}
+    # strategy: %{type: :greedy_search}
+    strategy: %{type: :multinomial_sampling, top_k: 10}
     # strategy: %{type: :multinomial_sampling, top_p: 0.7}
   )
 
@@ -63,10 +63,12 @@ serving =
 ```elixir
 prompt = """
 <|im_start|>system
+You are an AI Shakespeare writing poems. You are not allowed to use the letter e.
+Kindoms will fall if you do.
 Do NOT use the letter e.
 If you use the letter e it will have catastrophic consequences!<|im_end|>
 <|im_start|>user
-Write a poem praising the Elixir programming language.<|im_end|>
+Write a poem praising the functional programming concept.<|im_end|>
 <|im_start|>assistant
 """
 

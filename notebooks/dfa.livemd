@@ -4,11 +4,43 @@
 Mix.install([
   {:bumblebee, path: "#{Path.absname(__DIR__)}/.."},
   {:nx, "~> 0.10.0", override: true},
-  {:exla, "~> 0.10.0"}
+  {:exla, "~> 0.10.0"},
+  {:pythonx, "~> 0.4.2"},
+  {:kino_pythonx, "~> 0.1.0"}
 ])
 ```
 
+```pyproject.toml
+[project]
+name = "project"
+version = "0.0.0"
+requires-python = "==3.13.*"
+dependencies = ['outlines_core']
+```
+
 ## DFA definition
+
+```python
+import json
+
+from outlines_core.json_schema import build_regex_from_schema
+from outlines_core import Index, Vocabulary
+
+
+schema =  {
+  "title": "Foo",
+  "type": "object",
+  "properties": {"date": {"type": "string", "format": "date"}}
+}
+regex = build_regex_from_schema(json.dumps(schema))
+
+vocabulary = Vocabulary.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
+index = Index(regex, vocabulary)
+```
+
+```elixir
+IO.puts index
+```
 
 The following defines our DFA.
 The state transitions and the initial state were produced using outlines-core, with the following schema input.
@@ -158,8 +190,20 @@ sequence_length = 512
 
 # this prompt doesn't influence the shape of the output
 # it influences the content of the output
+
+# prompt = """
+# Create an array of numbers.
+# """
+
 prompt = """
-Create an array of numbers.
+<|im_start|>system
+You are an AI Shakespeare writing poems. You are not allowed to use the letter e.
+Kindoms will fall if you do.
+Do NOT use the letter e.
+If you use the letter e it will have catastrophic consequences!<|im_end|>
+<|im_start|>user
+Write a poem praising the functional programming concept.<|im_end|>
+<|im_start|>assistant
 """
 
 compact_states = fn initial_state, transitions ->
