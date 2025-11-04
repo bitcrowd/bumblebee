@@ -16,7 +16,35 @@ compiler = EXLA
 Nx.global_default_backend(backend)
 ```
 
-## Running the serving
+## A print logits processor
+
+```elixir
+defmodule PrintLogitsProcessor do
+  import Nx.Defn
+
+  deftransform debug_processor(logits, _context, opts \\ []) do
+    k = opts[:debug_limit]
+
+    print_top_k_logits_and_token_ids(logits, k)
+  end
+
+  defnp print_top_k_logits_and_token_ids(logits, k) do
+    token = create_token()
+
+    {top_values, top_indices} = Nx.top_k(logits, k: k)
+
+    {token, _top_values} =
+      hook_token(token, top_values, :top_values, &IO.inspect({:logits, &1}))
+
+    {token, _top_indices} =
+      hook_token(token, top_indices, :top_indices, &IO.inspect({:token_ids, &1}))
+
+    attach_token(token, logits)
+  end
+end
+```
+
+## Building the generate function
 
 ```elixir
 repo = {:hf, "HuggingFaceTB/SmolLM2-135M-Instruct"}
@@ -45,12 +73,116 @@ generation_config =
     strategy: %{type: :multinomial_sampling, top_k: 3 }
   )
 
-serving =
-  Bumblebee.Text.generation(model_info, tokenizer, generation_config,
-    compile: [batch_size: 1, sequence_length: sequence_length],
-    stream: false,
-    defn_options: [compiler: compiler]
+%{model: model, params: params, spec: spec} = model_info
+
+generate_fun =
+  Bumblebee.Text.Generation.build_generate(model, spec, generation_config,
+    logits_processors: [ &PrintLogitsProcessor.debug_processor(&1, &2, [debug_limit: 2])]
+  )
+```
+
+## Setting up the serving
+
+```elixir
+alias Bumblebee.Shared
+
+batch_keys = Shared.sequence_batch_keys(sequence_length)
+batch_size = 1
+defn_options = [compiler: compiler]
+
+preallocate_params = false
+
+tokenizer =
+  Bumblebee.configure(tokenizer,
+    length: sequence_length,
+    pad_direction: :left,
+    return_token_type_ids: false,
+    return_length: true
   )
 
+validate_input = fn text -> {:ok, %{text: text, seed: :erlang.system_time()}} end
+
+serving =
+  Nx.Serving.new(
+    fn batch_key, defn_options ->
+      params = Shared.maybe_preallocate(params, preallocate_params, defn_options)
+
+      scope = {:generate, batch_key}
+
+      generate_fun =
+        Shared.compile_or_jit(generate_fun, scope, defn_options, true, fn ->
+          {:sequence_length, sequence_length} = batch_key
+
+          inputs = %{
+            "input_ids" => Nx.template({batch_size, sequence_length}, :u32),
+            "attention_mask" => Nx.template({batch_size, sequence_length}, :u32),
+            "seed" => Nx.template({batch_size}, :s64)
+          }
+
+          [params, inputs]
+        end)
+
+      fn inputs ->
+        inputs = Shared.maybe_pad(inputs, batch_size)
+        generate_fun.(params, inputs) |> Shared.serving_post_computation()
+      end
+    end,
+    defn_options
+  )
+  |> Nx.Serving.batch_size(batch_size)
+  |> Nx.Serving.process_options(batch_keys: batch_keys)
+  |> Nx.Serving.client_preprocessing(fn input ->
+    {inputs, multi?} = Shared.validate_serving_input!(input, &validate_input.(&1))
+
+    texts = Enum.map(inputs, & &1.text)
+    seed = Enum.map(inputs, & &1.seed) |> Nx.tensor(type: :s64, backend: Nx.BinaryBackend)
+
+    inputs =
+      Nx.with_default_backend(Nx.BinaryBackend, fn ->
+        Bumblebee.apply_tokenizer(tokenizer, texts)
+      end)
+
+    {input_length, inputs} = Map.pop!(inputs, "length")
+    input_padded_length = Nx.axis_size(inputs["input_ids"], 1)
+
+    inputs = Map.put(inputs, "seed", seed)
+
+    batch_key = Shared.sequence_batch_key_for_inputs(inputs, sequence_length)
+    batch = [inputs] |> Nx.Batch.concatenate() |> Nx.Batch.key(batch_key)
+
+    {batch, {multi?, input_length, input_padded_length}}
+  end)
+  |> Nx.Serving.client_postprocessing(fn {%{token_ids: token_ids, length: length}, _metadata},
+                                         {multi?, input_length, input_padded_length} ->
+    decoded = Bumblebee.Tokenizer.decode(tokenizer, token_ids)
+    output_length = Nx.to_flat_list(length)
+    input_length = Nx.to_flat_list(input_length)
+
+    Enum.zip_with(
+      [decoded, output_length, input_length],
+      fn [decoded, output_length, input_length] ->
+        token_summary =
+          %{
+            input: input_length,
+            output: output_length,
+            padding: input_padded_length - input_length
+          }
+
+        %{results: [%{text: decoded, token_summary: token_summary}]}
+      end
+    )
+    |> Shared.normalize_output(multi?)
+  end)
+```
+
+## Run the serving
+
+```elixir
+prompt = """
+Tell me a funny joke please.
+"""
+```
+
+```elixir
 Nx.Serving.run(serving, prompt)
 ```

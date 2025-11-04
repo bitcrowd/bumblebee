@@ -3,26 +3,6 @@ defmodule Bumblebee.Text.Generation.LogitsProcessing do
 
   import Nx.Defn
 
-  deftransform debug_processor(logits, _context, opts \\ []) do
-    k = opts[:debug_limit]
-
-    print_top_k_logits_and_token_ids(logits, k)
-  end
-
-  defnp print_top_k_logits_and_token_ids(logits, k) do
-    token = create_token()
-
-    {top_values, top_indices} = Nx.top_k(logits, k: k)
-
-    {token, _top_values} =
-      hook_token(token, top_values, :top_values, &IO.inspect({:logits, &1}))
-
-    {token, _top_indices} =
-      hook_token(token, top_indices, :top_indices, &IO.inspect({:token_ids, &1}))
-
-    attach_token(token, logits)
-  end
-
   deftransform suppressed_tokens_processor(logits, _context, opts \\ []) do
     opts = Keyword.validate!(opts, [:suppressed_token_ids])
 
