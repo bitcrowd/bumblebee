@@ -382,7 +382,8 @@ defmodule Bumblebee.Text.Generation.LogitsProcessingTest do
     %{
       sequence: Nx.tensor(sequence),
       length: Enum.count(sequence, &(&1 != 0)),
-      input_length: 1
+      input_length: 1,
+      logits_processor_state: %{}
     }
   end
 end
