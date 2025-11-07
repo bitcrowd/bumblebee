@@ -29,7 +29,7 @@ defmodule Bumblebee.Text.Generation.DFAProcessor do
   end
 
   @impl Bumblebee.LogitsProcessor
-  def init(logits_processor, _context) do
+  def init(logits_processor, context) do
     dfa = logits_processor
 
     num_states =
@@ -51,18 +51,12 @@ defmodule Bumblebee.Text.Generation.DFAProcessor do
           Nx.indexed_put(transitions_tensor, index, next_state)
       end
 
-    initial_state =
-      List.wrap(dfa.initial_state)
-      |> Enum.map(&List.wrap(&1))
-      |> Nx.tensor()
-
-    transition_tensors = state_transitions_tensor
+    initial_state = Nx.tensor(dfa.initial_state)
+    [initial_state, _sequence] = Nx.broadcast_vectors([initial_state, context.sequence])
 
     %{
-      dfa_state: %{
-        last_state: initial_state,
-        state_transitions_tensor: transition_tensors
-      }
+      last_state: initial_state,
+      state_transitions_tensor: state_transitions_tensor
     }
   end
 
@@ -72,19 +66,15 @@ defmodule Bumblebee.Text.Generation.DFAProcessor do
   end
 
   deftransform dfa_processing(logits, state, context) do
-    transitions_tensor = state.dfa_state.state_transitions_tensor
+    transitions_tensor = state.state_transitions_tensor
+    last_state = state.last_state
 
-    last_state = state.dfa_state.last_state |> Nx.vectorize(:batch)
     current_state = current_state(context, last_state, transitions_tensor)
     logits = logits(logits, transitions_tensor, current_state)
 
-    current_state = Nx.devectorize(current_state, keep_names: false)
+    state = %{state | last_state: current_state}
 
-    dfa_state = %{state.dfa_state | last_state: current_state}
-
-    state = %{state | dfa_state: dfa_state}
-
-    {logits, state}
+    {state, logits}
   end
 
   defnp current_state(context, last_state, transitions_tensor) do
@@ -92,13 +82,13 @@ defmodule Bumblebee.Text.Generation.DFAProcessor do
       last_state
     else
       last_token_id = context.sequence[context.length - 1]
-      transitions_tensor[[Nx.squeeze(last_state), last_token_id]]
+      transitions_tensor[[last_state, last_token_id]]
     end
   end
 
   defnp logits(logits, transitions_tensor, current_state) do
     suppressed_logits = Nx.fill(logits, Nx.Constants.neg_infinity(), type: Nx.type(logits))
-    allowed_token_ids = transitions_tensor[Nx.squeeze(current_state)]
+    allowed_token_ids = transitions_tensor[current_state]
 
     Nx.select(allowed_token_ids, logits, suppressed_logits)
   end
