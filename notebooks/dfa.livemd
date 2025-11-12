@@ -36,6 +36,17 @@ schema =  {
     "type": "integer"
   }
 }
+
+# Also try minItems and maxItems. Watch how the number of states increases
+# schema =  {  
+#   "type": "array",
+#   "items": {
+#     "type": "integer"
+#   },
+#   "minItems": 10,
+#   "maxItems": 10 
+# }
+
 regex = build_regex_from_schema(json.dumps(schema))
 
 vocabulary = Vocabulary.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
@@ -53,6 +64,10 @@ state_transitions =
   end)
 
 initial_state = ~PY"index.get_initial_state()" |> Pythonx.decode()
+
+IO.inspect state_transitions
+IO.puts "the initial state will be '#{initial_state}''"
+frequencies = Enum.frequencies_by(state_transitions, fn {state, _token_id, _next_state} -> state end) 
 ```
 
 ## Running serving
@@ -70,20 +85,29 @@ sequence_length = 512
 # this prompt doesn't influence the shape of the output
 # it influences the content of the output
 
-# prompt = """
-# Create an array of numbers.
-# """
+prompt = """
+Create an array of numbers.
+"""
 
 prompt = """
 <|im_start|>system
-You are an AI Shakespeare writing poems. You are not allowed to use the letter e.
-Kindoms will fall if you do.
-Do NOT use the letter e.
-If you use the letter e it will have catastrophic consequences!<|im_end|>
+You are a random number generator. Please give me a set of random integers<|im_end|>
 <|im_start|>user
-Write a poem praising the functional programming concept.<|im_end|>
+Give me a set of random integers.<|im_end|>
 <|im_start|>assistant
 """
+
+# Also try what happens if the prompt format mismatches the grammar:
+# prompt = """
+# <|im_start|>system
+# You are an AI Shakespeare writing poems. You are not allowed to use the letter e.
+# Kindoms will fall if you do.
+# Do NOT use the letter e.
+# If you use the letter e it will have catastrophic consequences!<|im_end|>
+# <|im_start|>user
+# Write a poem praising the functional programming concept.<|im_end|>
+# <|im_start|>assistant
+# """
 
 compact_states = fn initial_state, transitions ->
   unique_states =
