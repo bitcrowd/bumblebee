@@ -107,6 +107,68 @@ defmodule Bumblebee.Text.GenerationTest do
     assert_equal(token_ids, Nx.tensor([[80, 1023, 1023]]))
   end
 
+  test "DFA processor" do
+    assert {:ok, %{model: model, params: params, spec: spec}} =
+             Bumblebee.load_model({:hf, "hf-internal-testing/tiny-random-GPT2LMHeadModel"})
+
+    {:ok, generation_config} =
+      Bumblebee.load_generation_config({:hf, "hf-internal-testing/tiny-random-GPT2LMHeadModel"})
+
+    assert %Bumblebee.Text.Gpt2{architecture: :for_causal_language_modeling} = spec
+
+    input_ids = Nx.tensor([[0, 0, 10, 20, 30, 40, 50, 60, 70, 80]])
+    attention_mask = Nx.tensor([[0, 0, 1, 1, 1, 1, 1, 1, 1, 1]])
+    seed = Nx.tensor([0])
+
+    inputs = %{
+      "input_ids" => Nx.Batch.concatenate([input_ids, input_ids]),
+      "attention_mask" => Nx.Batch.concatenate([attention_mask, attention_mask]),
+      "seed" => Nx.Batch.concatenate([seed, seed])
+    }
+
+    generation_config = Bumblebee.configure(generation_config, max_new_tokens: 4)
+
+    generate =
+      Bumblebee.Text.Generation.build_generate(model, spec, generation_config,
+        logits_processors: [
+          Bumblebee.configure(Bumblebee.Text.Generation.DFAProcessor,
+            initial_state: [1, 2],
+            state_transitions: [
+              {1, 2, 2},
+              {2, 3, 3},
+              {3, 2, 2}
+            ],
+            vocab_size: spec.vocab_size
+          )
+        ]
+      )
+
+    %{token_ids: token_ids} = generate.(params, inputs)
+
+    # according to DFA definition
+    # first batch entry starts in state 1
+
+    # first token_id should be 2 
+    assert_equal(token_ids[[0, 0]], 2)
+
+    # second token_id should be 3 
+    assert_equal(token_ids[[0, 1]], 3)
+
+    # third token_id should be 2 
+    assert_equal(token_ids[[0, 2]], 2)
+
+    # second batch entry starts in state 2
+
+    # first token_id should be 3 
+    assert_equal(token_ids[[1, 0]], 3)
+
+    # second token_id should be 2 
+    assert_equal(token_ids[[1, 1]], 2)
+
+    # third token_id should be 3 
+    assert_equal(token_ids[[1, 2]], 3)
+  end
+
   test "with stateful logits processor with different batch sizes" do
     assert {:ok, %{model: model, params: params, spec: spec}} =
              Bumblebee.load_model({:hf, "hf-internal-testing/tiny-random-GPT2LMHeadModel"})
